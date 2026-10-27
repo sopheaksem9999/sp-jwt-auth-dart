@@ -3,6 +3,7 @@ library;
 
 export 'src/claims.dart';
 export 'src/errors.dart';
+export 'src/refresh_lock.dart';
 export 'src/session.dart';
 export 'src/token_store.dart';
 
