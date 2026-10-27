@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import '../auth_core.dart';
+import '../envelope.dart';
 import '../session.dart';
 
 /// Module managing one-time password (OTP) delivery and verification.
@@ -42,6 +43,7 @@ class OtpModule {
       }
     }
 
+    throwIfEnvelopeFailure(data);
     final session = auth.endpoints.parseSession(data);
     await auth.store.write(session);
     await auth.restore();

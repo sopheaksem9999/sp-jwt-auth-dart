@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'claims.dart';
 import 'endpoints.dart';
+import 'envelope.dart';
 import 'errors.dart';
 import 'interceptor.dart';
 import 'modules/account_module.dart';
@@ -344,6 +345,7 @@ class SpJwtAuth {
           }
         }
 
+        throwIfEnvelopeFailure(data);
         final newSession = endpoints.parseSession(data);
         await store.write(newSession);
         _cachedSession = newSession;
@@ -513,6 +515,7 @@ class SpJwtAuth {
       }
     }
 
+    throwIfEnvelopeFailure(data);
     final session = endpoints.parseSession(data);
     await store.write(session);
     _cachedSession = session;

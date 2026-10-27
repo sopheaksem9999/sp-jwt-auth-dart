@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Fixed: `login`, `otp.verifyOtp` and the refresh path now throw `SpAuthError` (with `message`, `errorCode`, `requestId`) when the server returns HTTP 200 with `success: false`, instead of storing an empty session (J6).
+
 ## 0.1.0 (2026-10-27)
 
 - First stable release of `sp_jwt_auth` for Dart and Flutter.
