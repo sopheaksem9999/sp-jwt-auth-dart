@@ -1,6 +1,10 @@
 # sp_jwt_auth
 
-First-party JWT access and rotating refresh token authentication for Dart and Flutter.
+Typed Dart & Flutter client service for the [`sopheak/sp-jwt-auth`](https://packagist.org/packages/sopheak/sp-jwt-auth) Laravel backend package.
+
+> [!IMPORTANT]
+> **Client Service Compatibility Notice:**  
+> `sp_jwt_auth` is a client-side library and **works only with** backends running [`sopheak/sp-jwt-auth`](https://packagist.org/packages/sopheak/sp-jwt-auth). It handles token storage, proactive rotation, cross-tab and cross-isolate synchronization, and session lifecycles specifically tailored to the package's protocol.
 
 ## Features
 
@@ -18,10 +22,17 @@ Add `sp_jwt_auth` to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
+  sp_jwt_auth: ^0.1.0-beta.2
+```
+
+Or install from git:
+
+```yaml
+dependencies:
   sp_jwt_auth:
     git:
       url: https://github.com/sopheaksem9999/sp-jwt-auth-dart.git
-      ref: v0.1.0-beta.1
+      ref: v0.1.0-beta.2
 ```
 
 ## Quick Start
