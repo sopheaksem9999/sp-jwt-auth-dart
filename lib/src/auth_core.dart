@@ -7,6 +7,7 @@ import 'interceptor.dart';
 import 'refresh_lock.dart';
 import 'session.dart';
 import 'token_store.dart';
+import 'web/cookie_transport.dart';
 
 /// Authentication mode for the client.
 enum AuthMode {
@@ -55,6 +56,15 @@ class SpJwtAuth {
   StoredSession? _cachedSession;
   Future<String?>? _refreshInFlight;
 
+  /// Transport mode for authentication tokens.
+  final Transport transport;
+
+  /// CSRF configuration for cookie transport.
+  final Csrf csrf;
+
+  final BrowserCookieEnv _cookieEnv;
+  String? _csrfToken;
+
   /// Creates a new [SpJwtAuth] client.
   SpJwtAuth({
     required this.baseUrl,
@@ -62,10 +72,20 @@ class SpJwtAuth {
     required this.store,
     this.mode = AuthMode.userSession,
     this.refreshAhead = const Duration(seconds: 60),
+    this.transport = Transport.body,
+    this.csrf = const Csrf(),
+    BrowserCookieEnv? cookieEnv,
     RefreshLock? refreshLock,
     Dio? dio,
-  }) : _refreshLock = refreshLock ?? InProcessRefreshLock(),
-       dio = dio ?? Dio();
+  }) : _cookieEnv = cookieEnv ?? defaultCookieEnv(),
+       _refreshLock = refreshLock ?? InProcessRefreshLock(),
+       dio = dio ?? Dio() {
+    if (transport == Transport.cookie && !_cookieEnv.isSupported) {
+      throw UnsupportedError(
+        'Transport.cookie is only supported in browser environments or when a BrowserCookieEnv is provided.',
+      );
+    }
+  }
 
   /// Current authentication state.
   AuthState get state => _state;
@@ -116,6 +136,9 @@ class SpJwtAuth {
       await restore();
     }
     if (_cachedSession == null) {
+      if (transport == Transport.cookie) {
+        return _doRefresh();
+      }
       return null;
     }
 
@@ -187,22 +210,71 @@ class SpJwtAuth {
         }
       }
 
-      final rt = currentInStore?.refreshToken ?? _cachedSession?.refreshToken;
-      if (rt == null || rt.isEmpty) {
-        await _handleDefinitiveFailure('No refresh token available');
-        throw const SpAuthError(
-          code: SpAuthErrorCode.refreshReuseDetected,
-          message: 'No refresh token available',
-        );
+      final isCookie = transport == Transport.cookie;
+      String? rt;
+      if (!isCookie) {
+        rt = currentInStore?.refreshToken ?? _cachedSession?.refreshToken;
+        if (rt == null || rt.isEmpty) {
+          await _handleDefinitiveFailure('No refresh token available');
+          throw const SpAuthError(
+            code: SpAuthErrorCode.refreshReuseDetected,
+            message: 'No refresh token available',
+          );
+        }
       }
 
       final refreshUri = baseUrl.resolve(endpoints.refresh);
-      try {
-        final response = await dio.post<dynamic>(
+      _csrfToken ??= _cookieEnv.getCookie(csrf.cookie);
+
+      Future<Response<dynamic>> sendRefreshRequest(String? csrfVal) {
+        return dio.post<dynamic>(
           refreshUri.toString(),
-          data: {'refresh_token': rt},
-          options: Options(headers: {'Accept': 'application/json'}),
+          data: isCookie ? null : {'refresh_token': rt},
+          options: Options(
+            extra: {if (isCookie) 'withCredentials': true},
+            headers: {
+              'Accept': 'application/json',
+              if (isCookie && csrfVal != null && csrfVal.isNotEmpty)
+                csrf.header: csrfVal,
+            },
+          ),
         );
+      }
+
+      try {
+        Response<dynamic> response;
+        try {
+          response = await sendRefreshRequest(_csrfToken);
+        } on DioException catch (e) {
+          if (isCookie && e.response?.statusCode == 403) {
+            final data = e.response?.data;
+            final isCsrfErr =
+                data is Map &&
+                (data['code'] == 'csrf_failed' ||
+                    (data['message']?.toString().toLowerCase().contains(
+                          'csrf',
+                        ) ??
+                        false));
+            if (isCsrfErr) {
+              final liveCsrf = _cookieEnv.getCookie(csrf.cookie);
+              if (liveCsrf != null && liveCsrf != _csrfToken) {
+                _csrfToken = liveCsrf;
+                response = await sendRefreshRequest(_csrfToken);
+              } else {
+                rethrow;
+              }
+            } else {
+              rethrow;
+            }
+          } else {
+            rethrow;
+          }
+        }
+
+        final headerVals = response.headers[csrf.header];
+        if (headerVals != null && headerVals.isNotEmpty) {
+          _csrfToken = headerVals.first;
+        }
 
         final data = response.data;
         if (data is Map<String, dynamic>) {
