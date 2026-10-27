@@ -12,6 +12,7 @@ import 'refresh_lock.dart';
 import 'session.dart';
 import 'token_store.dart';
 import 'web/cookie_transport.dart';
+import 'web/tab_sync.dart';
 
 /// Authentication mode for the client.
 enum AuthMode {
@@ -59,6 +60,11 @@ class SpJwtAuth {
   AuthState _state = const Anonymous();
   StoredSession? _cachedSession;
   Future<String?>? _refreshInFlight;
+  bool _isHydrated = false;
+
+  /// Optional coordinator for cross-tab synchronisation.
+  final TabSync? tabSync;
+  StreamSubscription<TabSyncMessage>? _tabSyncSub;
 
   /// Transport mode for authentication tokens.
   final Transport transport;
@@ -78,6 +84,7 @@ class SpJwtAuth {
     this.refreshAhead = const Duration(seconds: 60),
     this.transport = Transport.body,
     this.csrf = const Csrf(),
+    this.tabSync,
     BrowserCookieEnv? cookieEnv,
     RefreshLock? refreshLock,
     Dio? dio,
@@ -89,10 +96,37 @@ class SpJwtAuth {
         'Transport.cookie is only supported in browser environments or when a BrowserCookieEnv is provided.',
       );
     }
+    if (tabSync != null) {
+      _tabSyncSub = tabSync!.messages.listen((msg) async {
+        if (msg is TabLoggedOutMessage) {
+          await store.clear();
+          _cachedSession = null;
+          _setState(const Anonymous());
+          _eventsController.add(
+            const SessionEnded(
+              'Logged out from another tab',
+              endReason: SessionEndReason.crossTabLogout,
+            ),
+          );
+        } else if (msg is TabRefreshedMessage) {
+          _cachedSession = msg.session;
+          _setState(
+            Authenticated(
+              user: msg.session.user ?? const {},
+              claims: _extractClaims(msg.session.accessToken),
+            ),
+          );
+          _eventsController.add(Refreshed(msg.session));
+        }
+      });
+    }
   }
 
   /// Current authentication state.
   AuthState get state => _state;
+
+  /// Whether persistent storage restoration has settled.
+  bool get isHydrated => _isHydrated;
 
   /// Stream of authentication state changes.
   Stream<AuthState> get changes => _stateController.stream;
@@ -119,20 +153,27 @@ class SpJwtAuth {
 
   /// Restores session state from the underlying [store].
   Future<void> restore() async {
-    final session = await store.read();
-    if (session != null) {
-      _cachedSession = session;
-      _setState(
-        Authenticated(
-          user: session.user ?? const {},
-          claims: _extractClaims(session.accessToken),
-        ),
-      );
-    } else {
-      _cachedSession = null;
-      _setState(const Anonymous());
+    try {
+      final session = await store.read();
+      if (session != null) {
+        _cachedSession = session;
+        _setState(
+          Authenticated(
+            user: session.user ?? const {},
+            claims: _extractClaims(session.accessToken),
+          ),
+        );
+      } else {
+        _cachedSession = null;
+        _setState(const Anonymous());
+      }
+    } finally {
+      _isHydrated = true;
     }
   }
+
+  /// Alias to [restore] guaranteeing storage hydration has settled.
+  Future<void> ready() => restore();
 
   /// Returns a valid access token, proactively refreshing if near expiry.
   Future<String?> accessToken() async {
@@ -290,7 +331,10 @@ class SpJwtAuth {
                 msg.contains('unauthenticated') ||
                 msg.contains('revoked')) {
               final rawMsg = data['message']?.toString() ?? 'Token revoked';
-              await _handleDefinitiveFailure(rawMsg);
+              await _handleDefinitiveFailure(
+                rawMsg,
+                SessionEndReason.refreshRejected,
+              );
               throw SpAuthError(
                 code: SpAuthErrorCode.refreshReuseDetected,
                 message: rawMsg,
@@ -310,11 +354,15 @@ class SpJwtAuth {
           ),
         );
         _eventsController.add(Refreshed(newSession));
+        tabSync?.notifyRefreshed(newSession);
         return newSession.accessToken;
       } on DioException catch (e) {
         final classified = _classifyDioError(e);
         if (classified.isDefinitive) {
-          await _handleDefinitiveFailure(classified.message);
+          final endReason = classified.code == SpAuthErrorCode.tokenExpired
+              ? SessionEndReason.tokenExpired
+              : SessionEndReason.refreshRejected;
+          await _handleDefinitiveFailure(classified.message, endReason);
         }
         throw SpAuthError(
           code: classified.code,
@@ -332,11 +380,14 @@ class SpJwtAuth {
     });
   }
 
-  Future<void> _handleDefinitiveFailure(String reason) async {
+  Future<void> _handleDefinitiveFailure(
+    String reason, [
+    SessionEndReason endReason = SessionEndReason.refreshRejected,
+  ]) async {
     await store.clear();
     _cachedSession = null;
     _setState(const Anonymous());
-    _eventsController.add(SessionEnded(reason));
+    _eventsController.add(SessionEnded(reason, endReason: endReason));
   }
 
   _ClassifiedError _classifyDioError(DioException e) {
@@ -522,10 +573,16 @@ class SpJwtAuth {
     } catch (_) {
       // Best-effort remote revocation: local session cleared regardless.
     } finally {
+      tabSync?.notifyLoggedOut();
       await store.clear();
       _cachedSession = null;
       _setState(const Anonymous());
-      _eventsController.add(const SessionEnded('User logged out'));
+      _eventsController.add(
+        const SessionEnded(
+          'User logged out',
+          endReason: SessionEndReason.manualLogout,
+        ),
+      );
     }
   }
 
@@ -543,6 +600,7 @@ class SpJwtAuth {
 
   /// Closes stream controllers and releases resources.
   Future<void> dispose() async {
+    await _tabSyncSub?.cancel();
     await _stateController.close();
     await _eventsController.close();
   }

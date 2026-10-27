@@ -203,6 +203,50 @@ void main() {
     );
     expect(profile['data']['id'], equals(123));
   });
+
+  test(
+    'isHydrated is false initially and becomes true after restore() or ready()',
+    () async {
+      final freshStore = MemoryTokenStore();
+      final freshAuth = SpJwtAuth(
+        baseUrl: Uri.parse('https://api.example.com'),
+        endpoints: auth.endpoints,
+        store: freshStore,
+      );
+
+      expect(freshAuth.isHydrated, isFalse);
+      expect(freshAuth.state, isA<Anonymous>());
+
+      await freshAuth.ready();
+
+      expect(freshAuth.isHydrated, isTrue);
+      expect(freshAuth.state, isA<Anonymous>());
+    },
+  );
+
+  test(
+    'logout emits SessionEnded with SessionEndReason.manualLogout',
+    () async {
+      responseHandler = (options) async {
+        return Response<dynamic>(
+          requestOptions: options,
+          statusCode: 200,
+          data: {'success': true},
+        );
+      };
+      final events = <AuthEvent>[];
+      final sub = auth.events.listen(events.add);
+
+      await auth.logout();
+      await Future<void>.delayed(Duration.zero);
+
+      final sessionEnded = events.whereType<SessionEnded>().firstOrNull;
+      expect(sessionEnded, isNotNull);
+      expect(sessionEnded!.endReason, equals(SessionEndReason.manualLogout));
+      expect(sessionEnded.reason, equals('User logged out'));
+      await sub.cancel();
+    },
+  );
 }
 
 class _MockAdapter implements HttpClientAdapter {

@@ -58,6 +58,63 @@ class SecondFactorRequiredResult extends LoginResult {
       'LoginResult.SecondFactorRequired(challengeId: $challengeId)';
 }
 
+/// Reasons why an authentication session ended.
+enum SessionEndReason {
+  /// User explicitly triggered logout.
+  manualLogout,
+
+  /// Another browser tab or window broadcast a logout.
+  crossTabLogout,
+
+  /// Access token expired and no refresh token was present or available.
+  tokenExpired,
+
+  /// Token refresh endpoint returned a definitive 401 or token reuse rejection.
+  refreshRejected,
+
+  /// Persistent storage was cleared externally.
+  storageCleared,
+
+  /// Unknown reason or unclassified session end.
+  unknown;
+
+  /// Serialized wire / string value.
+  String get value {
+    switch (this) {
+      case SessionEndReason.manualLogout:
+        return 'manual_logout';
+      case SessionEndReason.crossTabLogout:
+        return 'cross_tab_logout';
+      case SessionEndReason.tokenExpired:
+        return 'token_expired';
+      case SessionEndReason.refreshRejected:
+        return 'refresh_rejected';
+      case SessionEndReason.storageCleared:
+        return 'storage_cleared';
+      case SessionEndReason.unknown:
+        return 'unknown';
+    }
+  }
+
+  /// Parse a wire string into [SessionEndReason].
+  static SessionEndReason fromString(String raw) {
+    switch (raw) {
+      case 'manual_logout':
+        return SessionEndReason.manualLogout;
+      case 'cross_tab_logout':
+        return SessionEndReason.crossTabLogout;
+      case 'token_expired':
+        return SessionEndReason.tokenExpired;
+      case 'refresh_rejected':
+        return SessionEndReason.refreshRejected;
+      case 'storage_cleared':
+        return SessionEndReason.storageCleared;
+      default:
+        return SessionEndReason.unknown;
+    }
+  }
+}
+
 /// Sealed stream events representing lifecycle auth occurrences.
 sealed class AuthEvent {
   const AuthEvent();
@@ -66,10 +123,44 @@ sealed class AuthEvent {
 /// Session has been terminated due to expiry, rotation failure, or revocation.
 class SessionEnded extends AuthEvent {
   final String reason;
-  const SessionEnded(this.reason);
+  final SessionEndReason? _endReason;
+
+  const SessionEnded(this.reason, {SessionEndReason? endReason})
+    : _endReason = endReason;
+
+  const SessionEnded.manualLogout([this.reason = 'manual_logout'])
+    : _endReason = SessionEndReason.manualLogout;
+
+  const SessionEnded.crossTabLogout([this.reason = 'cross_tab_logout'])
+    : _endReason = SessionEndReason.crossTabLogout;
+
+  const SessionEnded.tokenExpired([this.reason = 'token_expired'])
+    : _endReason = SessionEndReason.tokenExpired;
+
+  const SessionEnded.refreshRejected([this.reason = 'refresh_rejected'])
+    : _endReason = SessionEndReason.refreshRejected;
+
+  const SessionEnded.storageCleared([this.reason = 'storage_cleared'])
+    : _endReason = SessionEndReason.storageCleared;
+
+  /// Typed reason why the session ended.
+  SessionEndReason get endReason =>
+      _endReason ?? SessionEndReason.fromString(reason);
 
   @override
-  String toString() => 'AuthEvent.SessionEnded(reason: $reason)';
+  String toString() =>
+      'AuthEvent.SessionEnded(reason: $reason, endReason: $endReason)';
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is SessionEnded &&
+          runtimeType == other.runtimeType &&
+          reason == other.reason &&
+          endReason == other.endReason;
+
+  @override
+  int get hashCode => Object.hash(reason, endReason);
 }
 
 /// Session has been refreshed with new tokens.
