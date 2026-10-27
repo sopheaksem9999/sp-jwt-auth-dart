@@ -115,6 +115,7 @@ class SpJwtAuth {
               endReason: SessionEndReason.crossTabLogout,
             ),
           );
+          _notifyListeners();
         } else if (msg is TabRefreshedMessage) {
           _cachedSession = msg.session;
           _setState(
@@ -124,6 +125,7 @@ class SpJwtAuth {
             ),
           );
           _eventsController.add(Refreshed(msg.session));
+          _notifyListeners();
         }
       });
     }
@@ -146,6 +148,56 @@ class SpJwtAuth {
   /// Stream of discrete authentication events.
   Stream<AuthEvent> get events => _eventsController.stream;
 
+  final List<void Function()> _listeners = [];
+
+  /// The current session snapshot, or `null` when anonymous or not yet restored.
+  ///
+  /// Synchronous and side-effect free: never performs I/O or a refresh.
+  StoredSession? get currentSession => _cachedSession;
+
+  /// Whether a session is currently held in memory.
+  bool get isAuthenticated => _cachedSession != null;
+
+  /// Id of the current user: `user['id']` if present, else the JWT `sub`.
+  String? get userId {
+    final session = _cachedSession;
+    if (session == null) return null;
+    final id = session.user?['id'];
+    if (id != null) return id.toString();
+    return _extractClaims(session.accessToken).sub;
+  }
+
+  /// Cached access token. Never refreshes and performs no I/O; it may be
+  /// expired. Use [accessToken] for a guaranteed-fresh token.
+  String? get accessTokenSync => _cachedSession?.accessToken;
+
+  /// Registers [listener], called synchronously after every session change
+  /// (restore, login, refresh, logout, cross-tab sync), once `currentSession`
+  /// and `state` are up to date. Returns a function that removes it.
+  void Function() addListener(void Function() listener) {
+    _listeners.add(listener);
+    return () => _listeners.remove(listener);
+  }
+
+  void _notifyListeners() {
+    if (_listeners.isEmpty) return;
+    for (final listener in List<void Function()>.of(_listeners)) {
+      try {
+        listener();
+      } catch (_) {
+        // A faulty listener must not affect other listeners or the auth flow.
+      }
+    }
+  }
+
+  static bool _sameSession(StoredSession? a, StoredSession? b) {
+    if (identical(a, b)) return true;
+    if (a == null || b == null) return false;
+    return a.accessToken == b.accessToken &&
+        a.refreshToken == b.refreshToken &&
+        a.expiresAt == b.expiresAt;
+  }
+
   void _setState(AuthState newState) {
     if (_state != newState) {
       _state = newState;
@@ -167,6 +219,8 @@ class SpJwtAuth {
   Future<void> restore() async {
     try {
       final session = await store.read();
+      final before = _cachedSession;
+      final wasHydrated = _isHydrated;
       if (session != null) {
         _cachedSession = session;
         _setState(
@@ -178,6 +232,10 @@ class SpJwtAuth {
       } else {
         _cachedSession = null;
         _setState(const Anonymous());
+      }
+      _isHydrated = true;
+      if (!wasHydrated || !_sameSession(before, _cachedSession)) {
+        _notifyListeners();
       }
     } finally {
       _isHydrated = true;
@@ -263,6 +321,7 @@ class SpJwtAuth {
               claims: _extractClaims(currentInStore.accessToken),
             ),
           );
+          _notifyListeners();
           return currentInStore.accessToken;
         }
       }
@@ -367,6 +426,7 @@ class SpJwtAuth {
           ),
         );
         _eventsController.add(Refreshed(newSession));
+        _notifyListeners();
         tabSync?.notifyRefreshed(newSession);
         return newSession.accessToken;
       } on DioException catch (e) {
@@ -401,6 +461,7 @@ class SpJwtAuth {
     _cachedSession = null;
     _setState(const Anonymous());
     _eventsController.add(SessionEnded(reason, endReason: endReason));
+    _notifyListeners();
   }
 
   _ClassifiedError _classifyDioError(DioException e) {
@@ -536,6 +597,7 @@ class SpJwtAuth {
         claims: _extractClaims(session.accessToken),
       ),
     );
+    _notifyListeners();
     return AuthenticatedResult(session);
   }
 
@@ -597,6 +659,7 @@ class SpJwtAuth {
           endReason: SessionEndReason.manualLogout,
         ),
       );
+      _notifyListeners();
     }
   }
 
