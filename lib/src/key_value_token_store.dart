@@ -7,6 +7,10 @@ import 'token_store.dart';
 abstract interface class KeyValueStorage {
   Future<String?> read(String key);
   Future<void> write(String key, String value);
+
+  /// Removes [key]. Deleting a key that does not exist MUST NOT throw:
+  /// [KeyValueTokenStore.write] deletes the access token before writing and
+  /// [KeyValueTokenStore.clear] deletes every key, including absent ones.
   Future<void> delete(String key);
 }
 

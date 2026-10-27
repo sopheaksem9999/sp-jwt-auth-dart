@@ -97,6 +97,29 @@ void main() {
     });
   });
 
+  group('base URL with a query string (relativeToBase: true)', () {
+    // RFC 3986 section 5.2.2: a reference with its own path takes the query of
+    // the reference (none here), so the base query is dropped.
+    test('resolveEndpoint drops the base query', () {
+      expect(
+        resolveEndpoint(
+          Uri.parse('https://h/api/v1?x=1'),
+          '/auth/login',
+          relativeToBase: true,
+        ),
+        Uri.parse('https://h/api/v1/auth/login'),
+      );
+    });
+    test('endpointUri drops the base query', () {
+      expect(
+        _auth('https://h/api/v1?x=1', relative: true)
+            .endpointUri('/auth/login')
+            .toString(),
+        'https://h/api/v1/auth/login',
+      );
+    });
+  });
+
   group('Endpoints.relativeToBase', () {
     test('defaults to false', () {
       expect(const Endpoints().relativeToBase, isFalse);

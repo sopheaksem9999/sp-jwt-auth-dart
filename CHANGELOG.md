@@ -8,6 +8,8 @@
 - Added: configurable OTP via `Endpoints.otpSend`/`otpVerify`/`otpResend` and `OtpOptions` (`sendBody`, `verifyBody`, `challengeIdFrom`); new `OtpModule.resendOtp`; `SpJwtAuth.otp` is now one cached instance so a captured challenge id survives to verify (J4).
 - Added: synchronous `SpJwtAuth.currentSession`, `isAuthenticated`, `userId`, `accessTokenSync` (no I/O, never refreshes) and `addListener(listener)` (returns a remover), notified after restore, login, refresh, logout and cross-tab sync with the snapshot already updated; listener exceptions are isolated (J5).
 - Added: `KeyValueStorage`, `StorageKeys` (overridable key names, neutral defaults) and `KeyValueTokenStore`, a pure-Dart `TokenStore` over any string key-value storage; `expiresAt` reads ISO-8601 or epoch seconds and is written as ISO-8601 UTC (J1).
+- Added: companion package `sp_jwt_auth_flutter` (`SecureStorageTokenStore`, `SpAuthListenable`) in the monorepo; not published yet (J1, J5).
+- Docs: README aligned with 0.1.0 (`^0.1.0` install), new "Flutter mobile" guide (storage, `relativeToBase`, `sp_laravel_api` pairing, `attach(dio)` warning), compile-checked `example/mobile_example.dart`, README consistency test (J7).
 
 ## 0.1.0 (2026-10-27)
 
