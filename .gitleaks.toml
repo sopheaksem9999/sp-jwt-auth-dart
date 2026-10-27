@@ -2,3 +2,9 @@ title = "sp_jwt_auth gitleaks config"
 
 [extend]
 useDefault = true
+
+[allowlist]
+description = "Obviously fake fixture values used by the test-suite"
+regexes = [
+  '''legacy_camel_rt_012''',
+]
