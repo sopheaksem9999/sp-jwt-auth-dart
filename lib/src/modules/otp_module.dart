@@ -17,29 +17,40 @@ class OtpModule {
       auth.otpOptions.sendBody?.call(identifier, channel) ??
       {'identifier': identifier, if (channel != null) 'channel': channel};
 
-  Future<void> _post(String path, Map<String, dynamic> body) async {
+  Future<void> _post(
+    String path,
+    Map<String, dynamic> body, {
+    required bool keepPreviousId,
+  }) async {
     final response = await auth.dio.post<dynamic>(
       auth.endpointUri(path).toString(),
       data: body,
       options: Options(headers: {'Accept': 'application/json'}),
     );
+    throwIfEnvelopeFailure(response.data);
     final capture = auth.otpOptions.challengeIdFrom;
-    if (capture != null) _challengeId = capture(response.data) ?? _challengeId;
+    if (capture != null) {
+      final id = capture(response.data);
+      _challengeId = keepPreviousId ? (id ?? _challengeId) : id;
+    }
   }
 
   /// Requests an OTP to be sent to the given [identifier] via optional [channel].
-  Future<void> sendOtp({required String identifier, String? channel}) =>
-      _post(auth.endpoints.otpSend, _sendBody(identifier, channel));
+  Future<void> sendOtp({required String identifier, String? channel}) => _post(
+    auth.endpoints.otpSend,
+    _sendBody(identifier, channel),
+    keepPreviousId: false,
+  );
 
   /// Requests the OTP for [identifier] to be sent again.
   ///
   /// Throws [StateError] when `Endpoints.otpResend` is not configured.
-  Future<void> resendOtp({required String identifier}) {
+  Future<void> resendOtp({required String identifier}) async {
     final path = auth.endpoints.otpResend;
     if (path == null) {
       throw StateError('Endpoints.otpResend is not configured');
     }
-    return _post(path, _sendBody(identifier, null));
+    await _post(path, _sendBody(identifier, null), keepPreviousId: true);
   }
 
   /// Verifies an OTP [code] for [identifier], storing the resulting session on success.
@@ -69,6 +80,7 @@ class OtpModule {
     throwIfEnvelopeFailure(data);
     final session = auth.endpoints.parseSession(data);
     await auth.store.write(session);
+    _challengeId = null;
     await auth.restore();
     return AuthenticatedResult(session);
   }

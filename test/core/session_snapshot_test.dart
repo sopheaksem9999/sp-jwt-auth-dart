@@ -92,6 +92,17 @@ void main() {
     expect(auth.accessTokenSync, 'new');
   });
 
+  test('listener is not called after dispose', () async {
+    var n = 0;
+    auth.addListener(() => n++);
+    await auth.dispose();
+    handler = (o) async => Response(requestOptions: o, data: body('a'));
+    try {
+      await auth.login({'u': 'x'});
+    } catch (_) {}
+    expect(n, 0);
+  });
+
   test(
     'listener fires on login, refresh, logout and rejected refresh',
     () async {

@@ -32,6 +32,16 @@ class _FailingStorage extends _MemStorage {
   }
 }
 
+class _DeleteThrows extends _MemStorage {
+  final String badKey;
+  _DeleteThrows(this.badKey);
+  @override
+  Future<void> delete(String key) async {
+    if (key == badKey) throw StateError('boom');
+    await super.delete(key);
+  }
+}
+
 void main() {
   late _MemStorage storage;
   late KeyValueTokenStore store;
@@ -114,6 +124,19 @@ void main() {
     );
     await store.clear();
     expect(storage.data, isEmpty);
+  });
+
+  test('clear attempts every delete and rethrows the first error', () async {
+    final failing = _DeleteThrows('sp_refresh_token');
+    final s = KeyValueTokenStore(failing);
+    failing.data.addAll({
+      'sp_access_token': 'a',
+      'sp_refresh_token': 'r',
+      'sp_access_token_expires_at': 'e',
+      'sp_user': '{}',
+    });
+    await expectLater(s.clear(), throwsA(isA<StateError>()));
+    expect(failing.data.keys, ['sp_refresh_token']);
   });
 
   test('write with null optional fields deletes stale keys', () async {

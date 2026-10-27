@@ -7,5 +7,5 @@ Uri resolveEndpoint(Uri base, String path, {required bool relativeToBase}) {
   if (!relativeToBase) return base.resolve(path);
   final basePath = base.path.endsWith('/') ? base.path : '${base.path}/';
   final rel = path.startsWith('/') ? path.substring(1) : path;
-  return base.replace(path: basePath).resolve(rel);
+  return base.resolve('$basePath$rel');
 }

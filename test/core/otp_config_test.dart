@@ -138,7 +138,10 @@ void main() {
 
   test('resendOtp without otpResend throws StateError', () async {
     final auth = build();
-    expect(() => auth.otp.resendOtp(identifier: 'a'), throwsStateError);
+    await expectLater(
+      auth.otp.resendOtp(identifier: 'a'),
+      throwsA(isA<StateError>()),
+    );
   });
 
   test('resendOtp with otpResend posts to that path', () async {

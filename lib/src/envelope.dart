@@ -10,7 +10,9 @@ void throwIfEnvelopeFailure(dynamic body) {
   throw SpAuthError(
     code: SpAuthErrorCode.unauthenticated,
     message: body['message']?.toString() ?? 'Request failed',
-    errorCode: errorCode is int ? errorCode : null,
+    errorCode: errorCode is int
+        ? errorCode
+        : (errorCode is String ? int.tryParse(errorCode) : null),
     requestId: requestId?.toString(),
   );
 }

@@ -89,10 +89,22 @@ class KeyValueTokenStore implements TokenStore {
 
   @override
   Future<void> clear() async {
-    await _storage.delete(keys.accessToken);
-    await _storage.delete(keys.refreshToken);
-    await _storage.delete(keys.expiresAt);
-    await _storage.delete(keys.user);
+    Object? firstError;
+    StackTrace? firstStack;
+    for (final key in [
+      keys.accessToken,
+      keys.refreshToken,
+      keys.expiresAt,
+      keys.user,
+    ]) {
+      try {
+        await _storage.delete(key);
+      } catch (e, st) {
+        firstError ??= e;
+        firstStack ??= st;
+      }
+    }
+    if (firstError != null) Error.throwWithStackTrace(firstError, firstStack!);
   }
 
   Future<void> _putOrDelete(String key, String? value) =>

@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import '../auth_core.dart';
+import '../envelope.dart';
 import '../session.dart';
 
 /// Module managing multi-factor authentication (MFA) challenges and verification.
@@ -56,6 +57,7 @@ class MfaModule {
       options: Options(headers: {'Accept': 'application/json'}),
     );
     final data = response.data;
+    throwIfEnvelopeFailure(data);
     final session = auth.endpoints.parseSession(data);
     await auth.store.write(session);
     await auth.restore();

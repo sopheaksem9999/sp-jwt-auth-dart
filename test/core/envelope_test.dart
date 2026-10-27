@@ -98,6 +98,109 @@ void main() {
     expect(auth.state, isA<Anonymous>());
   });
 
+  test(
+    'sendOtp and resendOtp throw SpAuthError on 200 success:false',
+    () async {
+      var captured = 0;
+      final auth = SpJwtAuth(
+        baseUrl: Uri.parse('https://api.example.com'),
+        endpoints: const Endpoints(otpResend: '/auth/otp/resend'),
+        store: store,
+        otpOptions: OtpOptions(
+          challengeIdFrom: (_) {
+            captured++;
+            return 'stale';
+          },
+        ),
+        dio: dio,
+      );
+      nextBody = failure;
+      for (final call in [
+        () => auth.otp.sendOtp(identifier: 'a@example.com'),
+        () => auth.otp.resendOtp(identifier: 'a@example.com'),
+      ]) {
+        Object? caught;
+        try {
+          await call();
+        } catch (e) {
+          caught = e;
+        }
+        expectEnvelopeError(caught);
+      }
+      expect(captured, 0);
+    },
+  );
+
+  test('second sendOtp without an id does not reuse the first id', () async {
+    final sent = <dynamic>[];
+    final auth = SpJwtAuth(
+      baseUrl: Uri.parse('https://api.example.com'),
+      endpoints: Endpoints(
+        parseSession: (data) =>
+            StoredSession(accessToken: 'at', refreshToken: 'rt'),
+      ),
+      store: store,
+      otpOptions: OtpOptions(
+        challengeIdFrom: (r) => (r as Map)['challenge'] as String?,
+        verifyBody: (id, code, challengeId) {
+          sent.add(challengeId);
+          return {'code': code};
+        },
+      ),
+      dio: dio,
+    );
+    nextBody = {'success': true, 'challenge': 'c1'};
+    await auth.otp.sendOtp(identifier: 'a');
+    nextBody = {'success': true};
+    await auth.otp.sendOtp(identifier: 'a');
+    await auth.otp.verifyOtp(identifier: 'a', code: '1');
+    expect(sent, [null]);
+  });
+
+  test('verify after a successful verify does not send the old id', () async {
+    final sent = <dynamic>[];
+    final auth = SpJwtAuth(
+      baseUrl: Uri.parse('https://api.example.com'),
+      endpoints: Endpoints(
+        parseSession: (data) =>
+            StoredSession(accessToken: 'at', refreshToken: 'rt'),
+      ),
+      store: store,
+      otpOptions: OtpOptions(
+        challengeIdFrom: (r) => (r as Map)['challenge'] as String?,
+        verifyBody: (id, code, challengeId) {
+          sent.add(challengeId);
+          return {'code': code};
+        },
+      ),
+      dio: dio,
+    );
+    nextBody = {'success': true, 'challenge': 'c1'};
+    await auth.otp.sendOtp(identifier: 'a');
+    await auth.otp.verifyOtp(identifier: 'a', code: '1');
+    await auth.otp.verifyOtp(identifier: 'a', code: '2');
+    expect(sent, ['c1', null]);
+  });
+
+  test('mfa verify throws SpAuthError on 200 success:false', () async {
+    final auth = createAuth();
+    nextBody = {
+      'success': false,
+      'error_code': 10004,
+      'message': 'Invalid code',
+    };
+    await expectLater(
+      auth.mfa.verify(challengeId: 'c', code: '1'),
+      throwsA(
+        isA<SpAuthError>()
+            .having((e) => e.message, 'message', 'Invalid code')
+            .having((e) => e.errorCode, 'errorCode', 10004),
+      ),
+    );
+    expect(await store.read(), isNull);
+    expect(auth.state, isA<Anonymous>());
+  });
+
   test('failed login leaves existing session intact', () async {
     final auth = createAuth();
     nextBody = success('first_at');
@@ -167,6 +270,16 @@ void main() {
       throwIfEnvelopeFailure('x');
       throwIfEnvelopeFailure(<String, dynamic>{'success': true});
       throwIfEnvelopeFailure(<String, dynamic>{});
+    });
+
+    test('accepts a numeric-string error_code', () {
+      expect(
+        () => throwIfEnvelopeFailure(<String, dynamic>{
+          'success': false,
+          'error_code': '10004',
+        }),
+        throwsA(isA<SpAuthError>().having((e) => e.errorCode, 'c', 10004)),
+      );
     });
 
     test('defaults message when absent', () {

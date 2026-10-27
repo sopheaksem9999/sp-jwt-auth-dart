@@ -83,6 +83,13 @@ void main() {
         Uri.parse('https://h/auth/login'),
       );
     });
+    test('first segment containing a colon is not parsed as a scheme', () {
+      for (final path in ['/auth:login', 'auth:login']) {
+        final u = resolveEndpoint(b, path, relativeToBase: true);
+        expect(u, Uri.parse('https://h/api/v1/auth:login'), reason: path);
+        expect(u.scheme, 'https');
+      }
+    });
     test('trailing slash and missing leading slash yield single slash', () {
       final expected = Uri.parse('https://h/api/v1/auth/login');
       for (final base in ['https://h/api/v1/', 'https://h/api/v1']) {
@@ -112,9 +119,10 @@ void main() {
     });
     test('endpointUri drops the base query', () {
       expect(
-        _auth('https://h/api/v1?x=1', relative: true)
-            .endpointUri('/auth/login')
-            .toString(),
+        _auth(
+          'https://h/api/v1?x=1',
+          relative: true,
+        ).endpointUri('/auth/login').toString(),
         'https://h/api/v1/auth/login',
       );
     });

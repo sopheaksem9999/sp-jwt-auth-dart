@@ -677,6 +677,7 @@ class SpJwtAuth {
 
   /// Closes stream controllers and releases resources.
   Future<void> dispose() async {
+    _listeners.clear();
     await _tabSyncSub?.cancel();
     await _stateController.close();
     await _eventsController.close();
