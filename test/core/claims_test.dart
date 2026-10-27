@@ -4,10 +4,14 @@ import 'package:test/test.dart';
 
 void main() {
   test('parse extracts sub, exp, scopes, sid and custom company claim', () {
-    const jwt = 'header.eyJzdWIiOiIxMjMiLCJleHAiOjE4OTM0NTYwMDAsInNjb3BlcyI6WyJyZWFkIiwid3JpdGUiXSwic2lkIjoiYWJjIiwiY29tcGFueV9pZCI6Ijk5OSJ9.sig';
+    const jwt =
+        'header.eyJzdWIiOiIxMjMiLCJleHAiOjE4OTM0NTYwMDAsInNjb3BlcyI6WyJyZWFkIiwid3JpdGUiXSwic2lkIjoiYWJjIiwiY29tcGFueV9pZCI6Ijk5OSJ9.sig';
     final claims = JwtClaims.parse(jwt, companyClaim: 'company_id');
     expect(claims.sub, equals('123'));
-    expect(claims.exp, equals(DateTime.fromMillisecondsSinceEpoch(1893456000000, isUtc: true)));
+    expect(
+      claims.exp,
+      equals(DateTime.fromMillisecondsSinceEpoch(1893456000000, isUtc: true)),
+    );
     expect(claims.scopes, equals(['read', 'write']));
     expect(claims.sid, equals('abc'));
     expect(claims.companyId, equals('999'));
@@ -25,7 +29,13 @@ void main() {
   test('parse malformed token throws SpAuthError invalidToken', () {
     expect(
       () => JwtClaims.parse('not.a.valid.jwt.parts'),
-      throwsA(isA<SpAuthError>().having((e) => e.code, 'code', SpAuthErrorCode.invalidToken)),
+      throwsA(
+        isA<SpAuthError>().having(
+          (e) => e.code,
+          'code',
+          SpAuthErrorCode.invalidToken,
+        ),
+      ),
     );
   });
 }

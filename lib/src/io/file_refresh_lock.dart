@@ -9,7 +9,9 @@ class FileRefreshLock implements RefreshLock {
   static final InProcessRefreshLock _inProcess = InProcessRefreshLock();
 
   FileRefreshLock({Directory? lockDir})
-      : lockDir = lockDir ?? Directory('${Directory.systemTemp.path}/sp_jwt_auth_locks') {
+    : lockDir =
+          lockDir ??
+          Directory('${Directory.systemTemp.path}/sp_jwt_auth_locks') {
     if (!this.lockDir.existsSync()) {
       try {
         this.lockDir.createSync(recursive: true);

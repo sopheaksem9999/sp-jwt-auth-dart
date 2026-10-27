@@ -13,11 +13,11 @@ class StoredSession {
   });
 
   Map<String, dynamic> toJson() => {
-        'access_token': accessToken,
-        if (refreshToken != null) 'refresh_token': refreshToken,
-        if (expiresAt != null) 'expires_at': expiresAt!.toIso8601String(),
-        if (user != null) 'user': user,
-      };
+    'access_token': accessToken,
+    if (refreshToken != null) 'refresh_token': refreshToken,
+    if (expiresAt != null) 'expires_at': expiresAt!.toIso8601String(),
+    if (user != null) 'user': user,
+  };
 
   factory StoredSession.fromJson(Map<String, dynamic> json) {
     DateTime? exp;
@@ -29,8 +29,12 @@ class StoredSession {
     }
 
     return StoredSession(
-      accessToken: json['access_token'] as String? ?? json['accessToken'] as String? ?? '',
-      refreshToken: json['refresh_token'] as String? ?? json['refreshToken'] as String?,
+      accessToken:
+          json['access_token'] as String? ??
+          json['accessToken'] as String? ??
+          '',
+      refreshToken:
+          json['refresh_token'] as String? ?? json['refreshToken'] as String?,
       expiresAt: exp,
       user: json['user'] as Map<String, dynamic>?,
     );

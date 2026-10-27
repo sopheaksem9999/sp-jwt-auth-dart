@@ -27,7 +27,10 @@ void main() {
     expect(loggedOut, isA<AuthEvent>());
 
     const error = AuthErrorOccurred(
-      SpAuthError(code: SpAuthErrorCode.storageError, message: 'Keychain locked'),
+      SpAuthError(
+        code: SpAuthErrorCode.storageError,
+        message: 'Keychain locked',
+      ),
     );
     expect(error, isA<AuthEvent>());
     expect(error.error.code, equals(SpAuthErrorCode.storageError));

@@ -37,7 +37,10 @@ class JwtClaims {
       var normalized = payloadRaw.replaceAll('-', '+').replaceAll('_', '/');
       final remainder = normalized.length % 4;
       if (remainder > 0) {
-        normalized = normalized.padRight(normalized.length + (4 - remainder), '=');
+        normalized = normalized.padRight(
+          normalized.length + (4 - remainder),
+          '=',
+        );
       }
 
       final jsonString = utf8.decode(base64.decode(normalized));
@@ -53,7 +56,10 @@ class JwtClaims {
       if (expVal is int) {
         exp = DateTime.fromMillisecondsSinceEpoch(expVal * 1000, isUtc: true);
       } else if (expVal is num) {
-        exp = DateTime.fromMillisecondsSinceEpoch((expVal * 1000).toInt(), isUtc: true);
+        exp = DateTime.fromMillisecondsSinceEpoch(
+          (expVal * 1000).toInt(),
+          isUtc: true,
+        );
       }
 
       final scopes = <String>[];

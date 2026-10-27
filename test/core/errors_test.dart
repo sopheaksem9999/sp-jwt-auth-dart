@@ -16,6 +16,11 @@ void main() {
     expect(error.status, equals(401));
     expect(error.errorCode, equals(10002));
     expect(error.requestId, equals('req-123'));
-    expect(error.toString(), contains('SpAuthError(unauthenticated): Token expired [status: 401, error_code: 10002, request_id: req-123]'));
+    expect(
+      error.toString(),
+      contains(
+        'SpAuthError(unauthenticated): Token expired [status: 401, error_code: 10002, request_id: req-123]',
+      ),
+    );
   });
 }
