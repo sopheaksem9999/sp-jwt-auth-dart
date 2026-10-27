@@ -11,6 +11,27 @@ class _MemStorage implements KeyValueStorage {
   Future<void> delete(String key) async => data.remove(key);
 }
 
+class _FailingStorage extends _MemStorage {
+  final ops = <String>[];
+  int? failAt;
+  void _op(String o) {
+    if (failAt != null && ops.length == failAt) throw StateError('crash');
+    ops.add(o);
+  }
+
+  @override
+  Future<void> write(String key, String value) async {
+    _op('w:$key');
+    await super.write(key, value);
+  }
+
+  @override
+  Future<void> delete(String key) async {
+    _op('d:$key');
+    await super.delete(key);
+  }
+}
+
 void main() {
   late _MemStorage storage;
   late KeyValueTokenStore store;
@@ -163,5 +184,51 @@ void main() {
     await auth.restore();
     expect(auth.isAuthenticated, isTrue);
     expect(auth.currentSession!.accessToken, 'a');
+  });
+
+  test('write puts the access token last', () async {
+    final fs = _FailingStorage();
+    await KeyValueTokenStore(fs).write(
+      StoredSession(
+        accessToken: 'a',
+        refreshToken: 'r',
+        expiresAt: exp,
+        user: {'id': 1},
+      ),
+    );
+    expect(fs.ops.last, 'w:sp_access_token');
+  });
+
+  test('crash midway through a rewrite never yields a half-session', () async {
+    const old = StoredSession(
+      accessToken: 'old',
+      refreshToken: 'oldr',
+      user: {'id': 1},
+    );
+    final next = StoredSession(accessToken: 'new', expiresAt: exp);
+    for (var n = 0; n < 6; n++) {
+      final fs = _FailingStorage();
+      final st = KeyValueTokenStore(fs);
+      await st.write(old);
+      fs.ops.clear();
+      fs.failAt = n;
+      try {
+        await st.write(next);
+      } catch (_) {}
+      fs.failAt = null;
+      final s = await st.read();
+      if (s != null) {
+        final complete =
+            (s.accessToken == 'new' &&
+                s.refreshToken == null &&
+                s.user == null &&
+                s.expiresAt == exp) ||
+            (s.accessToken == 'old' &&
+                s.refreshToken == 'oldr' &&
+                s.user != null &&
+                s.expiresAt == null);
+        expect(complete, isTrue, reason: 'crash at op $n gave $s');
+      }
+    }
   });
 }

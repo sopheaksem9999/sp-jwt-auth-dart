@@ -68,7 +68,9 @@ class KeyValueTokenStore implements TokenStore {
 
   @override
   Future<void> write(StoredSession session) async {
-    await _storage.write(keys.accessToken, session.accessToken);
+    // The access token is the presence marker for read(): remove it first and
+    // write it last so a crash mid-write reads as logged out, never mixed.
+    await _storage.delete(keys.accessToken);
     await _putOrDelete(keys.refreshToken, session.refreshToken);
     await _putOrDelete(
       keys.expiresAt,
@@ -78,6 +80,7 @@ class KeyValueTokenStore implements TokenStore {
       keys.user,
       session.user == null ? null : jsonEncode(session.user),
     );
+    await _storage.write(keys.accessToken, session.accessToken);
   }
 
   @override
