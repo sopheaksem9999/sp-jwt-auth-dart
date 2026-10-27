@@ -69,13 +69,27 @@ Persistent storage on a device needs a platform keychain. The core package stays
 
 - **`KeyValueTokenStore`** (this package): a `TokenStore` over any `KeyValueStorage` (`read`/`write`/`delete` of strings). Key names are overridable through `StorageKeys` (defaults `sp_access_token`, `sp_refresh_token`, `sp_access_token_expires_at`, `sp_user`). `expiresAt` is read as ISO-8601 or epoch seconds and written as ISO-8601 UTC.
 - **`KeyValueStorage.delete` must not throw for a missing key.** `write` deletes the access token first and writes it last (the access token is the presence marker, so a crash mid-write reads as logged out, never as a mixed session), and `clear` deletes every key.
-- **`SecureStorageTokenStore` and `SpAuthListenable` live in `sp_jwt_auth_flutter`**, not in this package. That companion is in this monorepo under `sp-jwt-auth-flutter/` and is **not published yet**; use a path dependency:
+- **`SecureStorageTokenStore` and `SpAuthListenable` will live in a companion package, `sp_jwt_auth_flutter`**, which is **not published yet**. Until it is, plug a platform keychain into `KeyValueTokenStore` yourself with a small `KeyValueStorage` adapter over `flutter_secure_storage` (add it to your app's `pubspec.yaml`):
 
-```yaml
-dependencies:
-  sp_jwt_auth: ^0.1.0
-  sp_jwt_auth_flutter:
-    path: ../sp-jwt-auth-flutter
+```dart
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:sp_jwt_auth/sp_jwt_auth.dart';
+
+class FlutterSecureKeyValue implements KeyValueStorage {
+  FlutterSecureKeyValue([this._s = const FlutterSecureStorage()]);
+  final FlutterSecureStorage _s;
+
+  @override
+  Future<String?> read(String key) => _s.read(key: key);
+  @override
+  Future<void> write(String key, String value) =>
+      _s.write(key: key, value: value);
+  // FlutterSecureStorage.delete on a missing key is a no-op, as required.
+  @override
+  Future<void> delete(String key) => _s.delete(key: key);
+}
+
+final store = KeyValueTokenStore(FlutterSecureKeyValue());
 ```
 
 A compile-checked, Flutter-free version of this setup is in [`example/mobile_example.dart`](example/mobile_example.dart).

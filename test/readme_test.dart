@@ -45,6 +45,12 @@ void main() {
     }
   });
 
+  test('README gives no unresolvable path dependency for the companion', () {
+    expect(readme, isNot(contains('../sp-jwt-auth-flutter')));
+    expect(readme, contains('implements KeyValueStorage'));
+    expect(readme, contains('FlutterSecureStorage'));
+  });
+
   test('README links an existing test file for each linked test path', () {
     final links = RegExp(r'\]\((test/[^)#]+)').allMatches(readme);
     expect(links, isNotEmpty);

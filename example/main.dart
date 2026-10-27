@@ -9,7 +9,7 @@ const bool useNewAuthClient = bool.fromEnvironment(
 );
 
 /// Example implementation of [TokenStore] wrapping secure key-value storage.
-class SecureStorageTokenStore implements TokenStore {
+class InMemoryDemoTokenStore implements TokenStore {
   final Map<String, String> _storage = {};
 
   @override
@@ -48,7 +48,7 @@ class SecureStorageTokenStore implements TokenStore {
 
 Future<void> main() async {
   // 1. Initialize secure storage seam
-  final tokenStore = SecureStorageTokenStore();
+  final tokenStore = InMemoryDemoTokenStore();
 
   // 2. Configure auth endpoints
   final endpoints = Endpoints(
