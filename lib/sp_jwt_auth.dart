@@ -5,6 +5,7 @@ export 'src/auth_core.dart';
 export 'src/claims.dart';
 export 'src/endpoints.dart';
 export 'src/errors.dart';
+export 'src/interceptor.dart';
 export 'src/refresh_lock.dart';
 export 'src/session.dart';
 export 'src/token_store.dart';

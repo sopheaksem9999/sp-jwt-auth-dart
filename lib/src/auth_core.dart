@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'claims.dart';
 import 'endpoints.dart';
 import 'errors.dart';
+import 'interceptor.dart';
 import 'refresh_lock.dart';
 import 'session.dart';
 import 'token_store.dart';
@@ -78,7 +79,9 @@ class SpJwtAuth {
   void _setState(AuthState newState) {
     if (_state != newState) {
       _state = newState;
-      _stateController.add(newState);
+      if (!_stateController.isClosed) {
+        _stateController.add(newState);
+      }
     }
   }
 
@@ -140,7 +143,7 @@ class SpJwtAuth {
   /// Returns `true` if refresh succeeded and request should be retried.
   Future<bool> handleUnauthorized() async {
     try {
-      final token = await _doRefresh();
+      final token = await _doRefresh(force: true);
       return token != null;
     } catch (_) {
       return false;
@@ -148,27 +151,31 @@ class SpJwtAuth {
   }
 
   /// Single-flight refresh entrypoint.
-  Future<String?> _doRefresh() {
+  Future<String?> _doRefresh({bool force = false}) {
     if (_refreshInFlight != null) {
       return _refreshInFlight!;
     }
-    final future = _executeRefresh();
+    final future = _executeRefresh(force: force);
     _refreshInFlight = future;
     return future.whenComplete(() {
       _refreshInFlight = null;
     });
   }
 
-  Future<String?> _executeRefresh() async {
+  Future<String?> _executeRefresh({bool force = false}) async {
     return _refreshLock.synchronized('refresh', () async {
       // Re-read store first: another isolate or process may have refreshed already.
       final currentInStore = await store.read();
       final now = DateTime.now().toUtc();
       if (currentInStore != null) {
+        final tokenChanged =
+            _cachedSession != null &&
+            currentInStore.accessToken != _cachedSession!.accessToken;
         final exp =
             currentInStore.expiresAt ??
             _extractClaims(currentInStore.accessToken).exp;
-        if (exp != null && exp.difference(now) >= refreshAhead) {
+        final isFresh = exp != null && exp.difference(now) >= refreshAhead;
+        if (tokenChanged || (!force && isFresh)) {
           _cachedSession = currentInStore;
           _setState(
             Authenticated(
@@ -333,15 +340,53 @@ class SpJwtAuth {
     );
   }
 
+  /// Lifecycle notification triggered when application returns to foreground.
+  ///
+  /// Silently checks token expiry and triggers a proactive single-flight refresh.
+  void onResumed() {
+    scheduleMicrotask(() async {
+      try {
+        if (_cachedSession == null) {
+          await restore();
+        }
+        if (_cachedSession != null) {
+          final now = DateTime.now().toUtc();
+          final exp =
+              _cachedSession!.expiresAt ??
+              _extractClaims(_cachedSession!.accessToken).exp;
+          if (exp != null && exp.difference(now) < refreshAhead) {
+            await _doRefresh();
+          }
+        }
+      } catch (_) {
+        // Foreground refresh on resume is silent.
+      }
+    });
+  }
+
   /// Authenticates with user credentials and stores the resulting session.
-  Future<StoredSession> login(Map<String, dynamic> credentials) async {
+  ///
+  /// Returns [SecondFactorRequiredResult] if MFA challenge is issued,
+  /// or [AuthenticatedResult] upon successful login.
+  Future<LoginResult> login(Map<String, dynamic> credentials) async {
     final uri = baseUrl.resolve(endpoints.login);
     final response = await dio.post<dynamic>(
       uri.toString(),
       data: credentials,
       options: Options(headers: {'Accept': 'application/json'}),
     );
-    final session = endpoints.parseSession(response.data);
+    final data = response.data;
+    if (data is Map<String, dynamic>) {
+      final mfaRequired =
+          data['mfa_required'] == true || data['requires_mfa'] == true;
+      final challengeId = (data['challenge_id'] ?? data['challengeId'])
+          ?.toString();
+      if (mfaRequired && challengeId != null && challengeId.isNotEmpty) {
+        return SecondFactorRequiredResult(challengeId);
+      }
+    }
+
+    final session = endpoints.parseSession(data);
     await store.write(session);
     _cachedSession = session;
     _setState(
@@ -350,7 +395,36 @@ class SpJwtAuth {
         claims: _extractClaims(session.accessToken),
       ),
     );
-    return session;
+    return AuthenticatedResult(session);
+  }
+
+  /// Fetches current user profile from the configured whoami endpoint.
+  Future<Map<String, dynamic>> whoami() async {
+    final hdrs = await headers();
+    final uri = baseUrl.resolve(endpoints.whoami);
+    final response = await dio.get<dynamic>(
+      uri.toString(),
+      options: Options(headers: {'Accept': 'application/json', ...hdrs}),
+    );
+    final data = response.data;
+    if (data is Map<String, dynamic>) {
+      return data;
+    }
+    return {'data': data};
+  }
+
+  /// Attaches an authentication and auto-refresh interceptor to [dio].
+  Interceptor attach(Dio dio) {
+    final interceptor = SpJwtAuthInterceptor(this, dio);
+    dio.interceptors.add(interceptor);
+    return interceptor;
+  }
+
+  /// Removes all interceptors managed by this [SpJwtAuth] instance from [dio].
+  void detach(Dio dio) {
+    dio.interceptors.removeWhere(
+      (i) => i is SpJwtAuthInterceptor && i.auth == this,
+    );
   }
 
   /// Logs out the user, attempting remote revocation and clearing local storage.

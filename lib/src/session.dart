@@ -34,6 +34,30 @@ class Authenticated extends AuthState {
   String toString() => 'AuthState.Authenticated(sub: ${claims.sub})';
 }
 
+/// Sealed result of a login attempt.
+sealed class LoginResult {
+  const LoginResult();
+}
+
+/// Login completed successfully with full session.
+class AuthenticatedResult extends LoginResult {
+  final StoredSession session;
+  const AuthenticatedResult(this.session);
+
+  @override
+  String toString() => 'LoginResult.Authenticated';
+}
+
+/// Login requires a second factor verification challenge.
+class SecondFactorRequiredResult extends LoginResult {
+  final String challengeId;
+  const SecondFactorRequiredResult(this.challengeId);
+
+  @override
+  String toString() =>
+      'LoginResult.SecondFactorRequired(challengeId: $challengeId)';
+}
+
 /// Sealed stream events representing lifecycle auth occurrences.
 sealed class AuthEvent {
   const AuthEvent();
