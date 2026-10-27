@@ -1,6 +1,13 @@
 import 'token_store.dart';
 
 /// Configured authentication endpoints and session response parser.
+///
+/// Endpoint paths (including those used by the otp, mfa, account and sessions
+/// modules) are resolved against `baseUrl`. By default ([relativeToBase] is
+/// false) a path starting with `/` replaces any path on `baseUrl`, so
+/// `https://h/api/v1` + `/auth/login` is `https://h/auth/login`. When
+/// [relativeToBase] is true, paths are appended beneath the `baseUrl` path:
+/// `https://h/api/v1/auth/login`.
 class Endpoints {
   /// Path for user login (default `/auth/login`).
   final String login;
@@ -14,6 +21,10 @@ class Endpoints {
   /// Path for fetching current user profile (default `/auth/whoami`).
   final String whoami;
 
+  /// Whether endpoint paths are joined beneath the path of `baseUrl`
+  /// (true) or resolved as absolute paths from its origin (false, default).
+  final bool relativeToBase;
+
   /// Transformer that extracts [StoredSession] from the backend response body.
   ///
   /// Defaults to [StoredSession.fromEnvelope] (envelope or flat body).
@@ -25,6 +36,7 @@ class Endpoints {
     this.refresh = '/auth/refresh',
     this.logout = '/auth/logout',
     this.whoami = '/auth/whoami',
+    this.relativeToBase = false,
     this.parseSession = _defaultParseSession,
   });
 }

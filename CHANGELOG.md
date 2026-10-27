@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added: `Endpoints.relativeToBase` (default `false`, behavior unchanged) joins endpoint paths beneath the `baseUrl` path, e.g. `https://h/api/v1` + `/auth/login`; new public `SpJwtAuth.endpointUri(path)` is used by the core and all modules (J2).
 - Added: `Endpoints.parseSession` is now optional; the default parses `{success, data: {...}}` envelopes and flat bodies via `StoredSession.fromEnvelope`, deriving `expiresAt` from `expires_in` (J3).
 - Fixed: `login`, `otp.verifyOtp` and the refresh path now throw `SpAuthError` (with `message`, `errorCode`, `requestId`) when the server returns HTTP 200 with `success: false`, instead of storing an empty session (J6).
 

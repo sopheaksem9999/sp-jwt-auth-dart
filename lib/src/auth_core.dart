@@ -12,6 +12,7 @@ import 'modules/sessions_module.dart';
 import 'refresh_lock.dart';
 import 'session.dart';
 import 'token_store.dart';
+import 'url.dart';
 import 'web/cookie_transport.dart';
 import 'web/tab_sync.dart';
 
@@ -122,6 +123,11 @@ class SpJwtAuth {
       });
     }
   }
+
+  /// Resolves an endpoint [path] against [baseUrl], honouring
+  /// [Endpoints.relativeToBase].
+  Uri endpointUri(String path) =>
+      resolveEndpoint(baseUrl, path, relativeToBase: endpoints.relativeToBase);
 
   /// Current authentication state.
   AuthState get state => _state;
@@ -269,7 +275,7 @@ class SpJwtAuth {
         }
       }
 
-      final refreshUri = baseUrl.resolve(endpoints.refresh);
+      final refreshUri = endpointUri(endpoints.refresh);
       _csrfToken ??= _cookieEnv.getCookie(csrf.cookie);
 
       Future<Response<dynamic>> sendRefreshRequest(String? csrfVal) {
@@ -498,7 +504,7 @@ class SpJwtAuth {
   /// Returns [SecondFactorRequiredResult] if MFA challenge is issued,
   /// or [AuthenticatedResult] upon successful login.
   Future<LoginResult> login(Map<String, dynamic> credentials) async {
-    final uri = baseUrl.resolve(endpoints.login);
+    final uri = endpointUri(endpoints.login);
     final response = await dio.post<dynamic>(
       uri.toString(),
       data: credentials,
@@ -531,7 +537,7 @@ class SpJwtAuth {
   /// Fetches current user profile from the configured whoami endpoint.
   Future<Map<String, dynamic>> whoami() async {
     final hdrs = await headers();
-    final uri = baseUrl.resolve(endpoints.whoami);
+    final uri = endpointUri(endpoints.whoami);
     final response = await dio.get<dynamic>(
       uri.toString(),
       options: Options(headers: {'Accept': 'application/json', ...hdrs}),
@@ -562,7 +568,7 @@ class SpJwtAuth {
     final currentRt = _cachedSession?.refreshToken;
     final currentAt = _cachedSession?.accessToken;
     try {
-      final uri = baseUrl.resolve(endpoints.logout);
+      final uri = endpointUri(endpoints.logout);
       await dio.post<dynamic>(
         uri.toString(),
         data: currentRt != null ? {'refresh_token': currentRt} : null,

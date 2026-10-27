@@ -13,7 +13,7 @@ class OtpModule {
 
   /// Requests an OTP to be sent to the given [identifier] via optional [channel].
   Future<void> sendOtp({required String identifier, String? channel}) async {
-    final uri = auth.baseUrl.resolve('/auth/otp/send');
+    final uri = auth.endpointUri('/auth/otp/send');
     await auth.dio.post<dynamic>(
       uri.toString(),
       data: {'identifier': identifier, if (channel != null) 'channel': channel},
@@ -26,7 +26,7 @@ class OtpModule {
     required String identifier,
     required String code,
   }) async {
-    final uri = auth.baseUrl.resolve('/auth/otp/verify');
+    final uri = auth.endpointUri('/auth/otp/verify');
     final response = await auth.dio.post<dynamic>(
       uri.toString(),
       data: {'identifier': identifier, 'code': code},

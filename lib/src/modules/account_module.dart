@@ -15,7 +15,7 @@ class AccountModule {
   /// Updates profile attributes for the current user.
   Future<Map<String, dynamic>> updateProfile(Map<String, dynamic> data) async {
     final hdrs = await auth.headers();
-    final uri = auth.baseUrl.resolve('/auth/account/profile');
+    final uri = auth.endpointUri('/auth/account/profile');
     final response = await auth.dio.put<dynamic>(
       uri.toString(),
       data: data,
@@ -32,7 +32,7 @@ class AccountModule {
     required String newPassword,
   }) async {
     final hdrs = await auth.headers();
-    final uri = auth.baseUrl.resolve('/auth/account/change-password');
+    final uri = auth.endpointUri('/auth/account/change-password');
     await auth.dio.post<dynamic>(
       uri.toString(),
       data: {'current_password': currentPassword, 'new_password': newPassword},
