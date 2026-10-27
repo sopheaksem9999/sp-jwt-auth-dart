@@ -1,3 +1,5 @@
+import 'errors.dart';
+
 /// Persistent session structure held in secure storage.
 class StoredSession {
   final String accessToken;
@@ -37,6 +39,47 @@ class StoredSession {
           json['refresh_token'] as String? ?? json['refreshToken'] as String?,
       expiresAt: exp,
       user: json['user'] as Map<String, dynamic>?,
+    );
+  }
+
+  /// Parses a backend response body that is either a `{success, data: {...}}`
+  /// envelope or a flat token object.
+  ///
+  /// `data` is unwrapped only when it is a [Map]. `expires_at` wins over
+  /// `expires_in` (seconds, int/num/numeric string, must be positive). Throws
+  /// [SpAuthError] when no non-empty access token is present.
+  factory StoredSession.fromEnvelope(dynamic body, {DateTime Function()? now}) {
+    Map<String, dynamic>? map;
+    if (body is Map) {
+      final data = body['data'];
+      final source = data is Map ? data : body;
+      map = Map<String, dynamic>.from(source);
+    }
+    final token = map == null
+        ? null
+        : (map['access_token'] ?? map['accessToken']);
+    if (map == null || token is! String || token.isEmpty) {
+      throw const SpAuthError(
+        code: SpAuthErrorCode.unauthenticated,
+        message: 'Response did not contain an access token',
+      );
+    }
+
+    final base = StoredSession.fromJson(map);
+    if (base.expiresAt != null) return base;
+
+    final raw = map['expires_in'] ?? map['expiresIn'];
+    final seconds = raw is num
+        ? raw
+        : (raw is String ? num.tryParse(raw.trim()) : null);
+    if (seconds == null || !seconds.isFinite || seconds <= 0) return base;
+    return StoredSession(
+      accessToken: base.accessToken,
+      refreshToken: base.refreshToken,
+      expiresAt: (now ?? DateTime.now().toUtc)().add(
+        Duration(milliseconds: (seconds * 1000).round()),
+      ),
+      user: base.user,
     );
   }
 }

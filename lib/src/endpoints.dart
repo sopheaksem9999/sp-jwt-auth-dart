@@ -15,6 +15,8 @@ class Endpoints {
   final String whoami;
 
   /// Transformer that extracts [StoredSession] from the backend response body.
+  ///
+  /// Defaults to [StoredSession.fromEnvelope] (envelope or flat body).
   final StoredSession Function(dynamic responseData) parseSession;
 
   /// Creates configured authentication [Endpoints].
@@ -23,6 +25,9 @@ class Endpoints {
     this.refresh = '/auth/refresh',
     this.logout = '/auth/logout',
     this.whoami = '/auth/whoami',
-    required this.parseSession,
+    this.parseSession = _defaultParseSession,
   });
 }
+
+StoredSession _defaultParseSession(dynamic body) =>
+    StoredSession.fromEnvelope(body);
