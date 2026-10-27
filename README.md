@@ -4,11 +4,13 @@ First-party JWT access and rotating refresh token authentication for Dart and Fl
 
 ## Features
 
-- **Single-Flight Refresh:** Automatically deduplicates concurrent token rotations across asynchronous calls.
-- **Proactive Expiration Renewal:** Seamlessly refreshes tokens ahead of time before expiration.
-- **Cross-Platform & Pure Dart:** Zero Flutter SDK dependencies in core libraries; compatible with mobile, desktop, web, and Wasm.
-- **Cross-Isolate & Cross-Tab Safety:** Synchronized refresh via `RefreshLock` (in-process, file-based for isolates, and Web Locks API for web).
-- **Failure Classification:** Distinguishes definitive authorization failures from transient network or server errors.
+- **Single-Flight Refresh Engine:** Deduplicates concurrent token refreshes into a single network flight.
+- **Proactive Expiration Renewal:** Automatically refreshes tokens within the `refreshAhead` window before token expiry.
+- **Pure Dart & Cross-Platform:** Zero Flutter SDK dependencies in core libraries; compatible with mobile (iOS, Android), desktop (macOS, Windows, Linux), web, and Wasm.
+- **Cross-Isolate & Cross-Tab Safety:** Synchronized token rotation via `RefreshLock` (in-process, POSIX advisory file locking for background isolates, and browser Web Locks API for web).
+- **Tab Synchronization:** `TabSync` communicates token refreshes and logouts across multiple browser tabs via `BroadcastChannel`.
+- **HttpOnly Cookie Support:** Native and web support for cookie-based transport with automated CSRF protection (`Csrf` config).
+- **Auth Feature Modules:** Typed modules for OTP login/verification (`OtpModule`), multi-factor authentication (`MfaModule`), device session management (`SessionsModule`), and profile/password updates (`AccountModule`).
 
 ## Installation
 
@@ -25,24 +27,69 @@ dependencies:
 ## Quick Start
 
 ```dart
+import 'package:dio/dio.dart';
 import 'package:sp_jwt_auth/sp_jwt_auth.dart';
 
 final auth = SpJwtAuth(
   baseUrl: Uri.parse('https://api.example.com'),
   endpoints: Endpoints(
-    login: '/auth/login',
-    refresh: '/auth/refresh',
-    logout: '/auth/logout',
-    whoami: '/auth/whoami',
-    parseSession: (data) => StoredSession.fromJson(data as Map<String, dynamic>),
+    login: '/api/v1/auth/login',
+    refresh: '/api/v1/auth/refresh',
+    logout: '/api/v1/auth/logout',
+    whoami: '/api/v1/auth/whoami',
+    parseSession: (data) {
+      final map = (data as Map<String, dynamic>)['data'] as Map<String, dynamic>;
+      return StoredSession.fromJson(map);
+    },
   ),
-  store: MemoryTokenStore(),
+  store: MemoryTokenStore(), // Use SecureStorageTokenStore in production
+  dio: Dio(),
 );
 
+// Restore session on app launch
 await auth.restore();
 ```
 
-## Verification Status
+## Flutter & Riverpod Integration
 
-- **Fake Backend & In-Process Tests:** Verified in CI.
-- **Platform Matrix:** Tested on Dart 3.8.0 and latest stable.
+```dart
+// State notifier or Riverpod provider
+final authStateProvider = StreamProvider<AuthState>((ref) {
+  return auth.changes;
+});
+
+// GoRouter redirect guard
+String? authRedirectGuard(BuildContext context, GoRouterState state) {
+  final authState = auth.state;
+  final loggingIn = state.matchedLocation == '/login';
+
+  if (authState is Anonymous && !loggingIn) {
+    return '/login';
+  }
+  if (authState is Authenticated && loggingIn) {
+    return '/dashboard';
+  }
+  return null;
+}
+```
+
+## App Lifecycle Integration
+
+Call `onResumed()` when the application returns to the foreground to proactively refresh near-expiry tokens:
+
+```dart
+// In your AppLifecycleListener or WidgetsBindingObserver:
+@override
+void didChangeAppLifecycleState(AppLifecycleState state) {
+  if (state == AppLifecycleState.resumed) {
+    auth.onResumed();
+  }
+}
+```
+
+## Verification & Status
+
+- **Automated Tests:** 52 tests passing (unit, concurrency, web locks, storage compatibility).
+- **Platform Matrix:** Verified on Dart SDK `>=3.8.0 <4.0.0` and latest stable.
+- **Web & Wasm:** Verified clean JavaScript compilation and browser Web Locks integration.
+- **Public-Repo Hygiene:** Zero forbidden internal names; automated secret scanning with Gitleaks.
