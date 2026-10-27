@@ -1,0 +1,4 @@
+title = "sp_jwt_auth gitleaks config"
+
+[extend]
+useDefault = true

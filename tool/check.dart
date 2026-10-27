@@ -46,4 +46,12 @@ void main() {
   }
 
   stdout.writeln('Import check passed: zero forbidden imports.');
+
+  // 2. Run neutral names check
+  final neutralResult = Process.runSync('dart', ['tool/check_neutral_names.dart']);
+  if (neutralResult.exitCode != 0) {
+    stderr.write(neutralResult.stderr);
+    exit(neutralResult.exitCode);
+  }
+  stdout.write(neutralResult.stdout);
 }
