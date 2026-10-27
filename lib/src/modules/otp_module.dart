@@ -11,14 +11,35 @@ class OtpModule {
   /// Creates a new [OtpModule].
   OtpModule(this.auth);
 
-  /// Requests an OTP to be sent to the given [identifier] via optional [channel].
-  Future<void> sendOtp({required String identifier, String? channel}) async {
-    final uri = auth.endpointUri('/auth/otp/send');
-    await auth.dio.post<dynamic>(
-      uri.toString(),
-      data: {'identifier': identifier, if (channel != null) 'channel': channel},
+  String? _challengeId;
+
+  Map<String, dynamic> _sendBody(String identifier, String? channel) =>
+      auth.otpOptions.sendBody?.call(identifier, channel) ??
+      {'identifier': identifier, if (channel != null) 'channel': channel};
+
+  Future<void> _post(String path, Map<String, dynamic> body) async {
+    final response = await auth.dio.post<dynamic>(
+      auth.endpointUri(path).toString(),
+      data: body,
       options: Options(headers: {'Accept': 'application/json'}),
     );
+    final capture = auth.otpOptions.challengeIdFrom;
+    if (capture != null) _challengeId = capture(response.data) ?? _challengeId;
+  }
+
+  /// Requests an OTP to be sent to the given [identifier] via optional [channel].
+  Future<void> sendOtp({required String identifier, String? channel}) =>
+      _post(auth.endpoints.otpSend, _sendBody(identifier, channel));
+
+  /// Requests the OTP for [identifier] to be sent again.
+  ///
+  /// Throws [StateError] when `Endpoints.otpResend` is not configured.
+  Future<void> resendOtp({required String identifier}) {
+    final path = auth.endpoints.otpResend;
+    if (path == null) {
+      throw StateError('Endpoints.otpResend is not configured');
+    }
+    return _post(path, _sendBody(identifier, null));
   }
 
   /// Verifies an OTP [code] for [identifier], storing the resulting session on success.
@@ -26,10 +47,12 @@ class OtpModule {
     required String identifier,
     required String code,
   }) async {
-    final uri = auth.endpointUri('/auth/otp/verify');
+    final uri = auth.endpointUri(auth.endpoints.otpVerify);
     final response = await auth.dio.post<dynamic>(
       uri.toString(),
-      data: {'identifier': identifier, 'code': code},
+      data:
+          auth.otpOptions.verifyBody?.call(identifier, code, _challengeId) ??
+          {'identifier': identifier, 'code': code},
       options: Options(headers: {'Accept': 'application/json'}),
     );
     final data = response.data;

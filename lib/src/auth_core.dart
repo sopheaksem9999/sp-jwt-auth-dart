@@ -71,6 +71,9 @@ class SpJwtAuth {
   /// Transport mode for authentication tokens.
   final Transport transport;
 
+  /// Customization of OTP request bodies and challenge-id handling.
+  final OtpOptions otpOptions;
+
   /// CSRF configuration for cookie transport.
   final Csrf csrf;
 
@@ -87,10 +90,12 @@ class SpJwtAuth {
     this.transport = Transport.body,
     this.csrf = const Csrf(),
     this.tabSync,
+    OtpOptions? otpOptions,
     BrowserCookieEnv? cookieEnv,
     RefreshLock? refreshLock,
     Dio? dio,
-  }) : _cookieEnv = cookieEnv ?? defaultCookieEnv(),
+  }) : otpOptions = otpOptions ?? const OtpOptions(),
+       _cookieEnv = cookieEnv ?? defaultCookieEnv(),
        _refreshLock = refreshLock ?? InProcessRefreshLock(),
        dio = dio ?? Dio() {
     if (transport == Transport.cookie && !_cookieEnv.isSupported) {
@@ -596,7 +601,7 @@ class SpJwtAuth {
   }
 
   /// One-time password (OTP) operations.
-  OtpModule get otp => OtpModule(this);
+  late final OtpModule otp = OtpModule(this);
 
   /// Multi-factor authentication (MFA) operations.
   MfaModule get mfa => MfaModule(this);
