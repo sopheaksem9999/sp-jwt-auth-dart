@@ -59,3 +59,7 @@ jobs:
 
       - name: Run tests
         run: dart test
+
+      - name: Smoke check web compilation
+        if: matrix.sdk == 'stable'
+        run: dart compile js test/web/two_tab_refresh_test.dart -o /tmp/smoke_web.js
