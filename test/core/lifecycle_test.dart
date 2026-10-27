@@ -82,8 +82,10 @@ void main() {
       };
 
       auth.onResumed();
-      // Allow async microtask/future to execute
-      await Future<void>.delayed(const Duration(milliseconds: 20));
+      // Allow async background refresh to execute
+      for (var i = 0; i < 50 && refreshCount == 0; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
 
       expect(refreshCount, equals(1));
       expect(await auth.accessToken(), equals('new_on_resumed_token'));

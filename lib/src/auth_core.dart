@@ -4,6 +4,10 @@ import 'claims.dart';
 import 'endpoints.dart';
 import 'errors.dart';
 import 'interceptor.dart';
+import 'modules/account_module.dart';
+import 'modules/mfa_module.dart';
+import 'modules/otp_module.dart';
+import 'modules/sessions_module.dart';
 import 'refresh_lock.dart';
 import 'session.dart';
 import 'token_store.dart';
@@ -524,6 +528,18 @@ class SpJwtAuth {
       _eventsController.add(const SessionEnded('User logged out'));
     }
   }
+
+  /// One-time password (OTP) operations.
+  OtpModule get otp => OtpModule(this);
+
+  /// Multi-factor authentication (MFA) operations.
+  MfaModule get mfa => MfaModule(this);
+
+  /// Active session management operations.
+  SessionsModule get sessions => SessionsModule(this);
+
+  /// Account profile and password operations.
+  AccountModule get account => AccountModule(this);
 
   /// Closes stream controllers and releases resources.
   Future<void> dispose() async {
