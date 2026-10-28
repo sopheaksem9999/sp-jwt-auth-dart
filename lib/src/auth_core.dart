@@ -181,65 +181,72 @@ class SpJwtAuth {
         cancelToken,
       );
       sw.stop();
-      final body = response.data;
-      SpAuthErrorCode? code;
-      int? errorCode;
-      String? rid = response.headers.value('x-request-id');
-      if (body is Map<String, dynamic>) {
-        if (body['success'] == false) {
-          code = SpAuthErrorCode.unauthenticated;
-          final ec = body['error_code'];
-          errorCode = ec is int ? ec : (ec is String ? int.tryParse(ec) : null);
+      // Entry building is isolated: it can never change the call's result.
+      try {
+        final body = response.data;
+        SpAuthErrorCode? code;
+        int? errorCode;
+        String? rid = response.headers.value('x-request-id');
+        if (body is Map<String, dynamic>) {
+          if (body['success'] == false) {
+            code = SpAuthErrorCode.unauthenticated;
+            final ec = body['error_code'];
+            errorCode = ec is int
+                ? ec
+                : (ec is String ? int.tryParse(ec) : null);
+          }
+          final meta = body['meta'];
+          if (rid == null && meta is Map && meta['request_id'] != null) {
+            rid = meta['request_id'].toString();
+          }
         }
-        final meta = body['meta'];
-        if (rid == null && meta is Map && meta['request_id'] != null) {
-          rid = meta['request_id'].toString();
-        }
-      }
-      _deliver(
-        log,
-        AuthLogEntry(
-          method: m,
-          path: path,
-          status: response.statusCode,
-          duration: sw.elapsed,
-          requestId: rid,
-          attempt: attempt,
-          code: code,
-          errorCode: errorCode,
-        ),
-      );
+        _emit(
+          log,
+          () => AuthLogEntry(
+            method: m,
+            path: path,
+            status: response.statusCode,
+            duration: sw.elapsed,
+            requestId: _cleanRequestId(rid),
+            attempt: attempt,
+            code: code,
+            errorCode: errorCode,
+          ),
+        );
+      } catch (_) {}
       return response;
     } on DioException catch (e) {
       sw.stop();
-      final body = e.response?.data;
-      String? rid = e.response?.headers.value('x-request-id');
-      int? errorCode;
-      if (body is Map<String, dynamic>) {
-        final ec = body['error_code'];
-        errorCode = ec is int ? ec : (ec is String ? int.tryParse(ec) : null);
-        final meta = body['meta'];
-        if (rid == null && meta is Map && meta['request_id'] != null) {
-          rid = meta['request_id'].toString();
-        }
-      }
-      SpAuthErrorCode? code;
       try {
-        code = _classifyDioError(e).code;
+        final body = e.response?.data;
+        String? rid = e.response?.headers.value('x-request-id');
+        int? errorCode;
+        if (body is Map<String, dynamic>) {
+          final ec = body['error_code'];
+          errorCode = ec is int ? ec : (ec is String ? int.tryParse(ec) : null);
+          final meta = body['meta'];
+          if (rid == null && meta is Map && meta['request_id'] != null) {
+            rid = meta['request_id'].toString();
+          }
+        }
+        SpAuthErrorCode? code;
+        try {
+          code = _classifyDioError(e).code;
+        } catch (_) {}
+        _emit(
+          log,
+          () => AuthLogEntry(
+            method: m,
+            path: path,
+            status: e.response?.statusCode,
+            duration: sw.elapsed,
+            requestId: _cleanRequestId(rid),
+            attempt: attempt,
+            code: code,
+            errorCode: errorCode,
+          ),
+        );
       } catch (_) {}
-      _deliver(
-        log,
-        AuthLogEntry(
-          method: m,
-          path: path,
-          status: e.response?.statusCode,
-          duration: sw.elapsed,
-          requestId: rid,
-          attempt: attempt,
-          code: code,
-          errorCode: errorCode,
-        ),
-      );
       rethrow;
     }
   }
@@ -287,12 +294,33 @@ class SpJwtAuth {
     }
   }
 
-  void _deliver(AuthLogger log, AuthLogEntry entry) {
+  /// Builds and delivers one entry. Everything here is isolated: neither a
+  /// surprise while building the entry nor a faulty sink may change the
+  /// call's result or escape as an uncaught error.
+  void _emit(AuthLogger log, AuthLogEntry Function() build) {
     try {
-      log.sink(entry);
+      final entry = build();
+      // Call through `dynamic` so a sink that is really `async` (or returns
+      // a Future) can be detected and its failure swallowed; otherwise the
+      // failed Future would surface as an unhandled async error.
+      final result = (log.sink as dynamic)(entry);
+      if (result is Future) {
+        result.then<void>((_) {}, onError: (Object _) {});
+      }
     } catch (_) {
       // A faulty sink must never change the request outcome.
     }
+  }
+
+  static final RegExp _controlChars = RegExp(r'[\u0000-\u001f\u007f-\u009f]');
+
+  /// Caps a server-supplied request id at 128 characters and strips C0/C1
+  /// control characters, so it cannot inject lines or bloat logs.
+  static String? _cleanRequestId(String? raw) {
+    if (raw == null) return null;
+    final cleaned = raw.replaceAll(_controlChars, '');
+    final capped = cleaned.length > 128 ? cleaned.substring(0, 128) : cleaned;
+    return capped.isEmpty ? null : capped;
   }
 
   /// Resolves an endpoint [path] against [baseUrl], honouring

@@ -1,7 +1,10 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:sp_jwt_auth/sp_jwt_auth.dart';
 import 'package:test/test.dart';
+
+import '../support/until.dart';
 
 typedef _Reply = ({int status, Object? body, Map<String, String> headers});
 
@@ -355,5 +358,105 @@ void main() {
       failing.login({'email': 'ada@example.com', 'password': 'pw'}),
       throwsA(isA<DioException>()),
     );
+  });
+
+  group('request id sanitising', () {
+    final hostile = 'ab\ncd\r\te\u001b[31mred\u0085\u009f${'x' * 10000}';
+    final control = RegExp(r'[\u0000-\u001f\u007f-\u009f]');
+
+    void expectClean(AuthLogEntry e) {
+      expect(e.requestId, isNotNull);
+      expect(e.requestId!.length, lessThanOrEqualTo(128));
+      expect(control.hasMatch(e.requestId!), isFalse);
+      expect(control.hasMatch(e.toString()), isFalse);
+      expect(e.requestId, startsWith('abcde'));
+    }
+
+    test('header request id is capped and stripped of control chars', () async {
+      final entries = <AuthLogEntry>[];
+      final auth = _auth(
+        _Adapter((_) => _ok(null, {'X-Request-Id': hostile})),
+        logger: AuthLogger(sink: entries.add),
+        logRequests: true,
+      );
+      await auth.login({'email': 'ada@example.com', 'password': 'pw'});
+      expectClean(entries.single);
+    });
+
+    test('meta.request_id in a 200 envelope failure is sanitised', () async {
+      final entries = <AuthLogEntry>[];
+      final auth = _auth(
+        _Adapter(
+          (_) => _ok({
+            'success': false,
+            'message': 'no',
+            'error_code': 1,
+            'meta': {'request_id': hostile},
+          }),
+        ),
+        logger: AuthLogger(sink: entries.add),
+        logRequests: true,
+      );
+      await expectLater(
+        auth.login({'email': 'ada@example.com', 'password': 'pw'}),
+        throwsA(isA<SpAuthError>()),
+      );
+      expectClean(entries.single);
+    });
+
+    test('a normal id is unchanged', () async {
+      final entries = <AuthLogEntry>[];
+      final auth = _auth(
+        _Adapter((_) => _ok(null, {'X-Request-Id': 'req-123_AB.c'})),
+        logger: AuthLogger(sink: entries.add),
+        logRequests: true,
+      );
+      await auth.login({'email': 'ada@example.com', 'password': 'pw'});
+      expect(entries.single.requestId, 'req-123_AB.c');
+    });
+  });
+
+  group('async sink isolation', () {
+    Future<void> run(Object? Function(AuthLogEntry) sink) async {
+      final uncaught = <Object>[];
+      var delivered = 0;
+      await runZonedGuarded(() async {
+        final auth = _auth(
+          _Adapter((_) => _ok()),
+          logger: AuthLogger(
+            sink:
+                ((AuthLogEntry e) {
+                      delivered++;
+                      return sink(e);
+                    })
+                    as void Function(AuthLogEntry),
+          ),
+          logRequests: true,
+        );
+        final r = await auth.login({
+          'email': 'ada@example.com',
+          'password': 'pw',
+        });
+        expect(r, isA<AuthenticatedResult>());
+        await until(() => delivered == 1);
+        await Future<void>.delayed(Duration.zero);
+        await Future<void>.delayed(Duration.zero);
+      }, (e, _) => uncaught.add(e));
+      expect(uncaught, isEmpty);
+    }
+
+    test('an async sink that throws causes no uncaught error', () async {
+      await run((_) async => throw StateError('async boom'));
+    });
+
+    test('a sink returning a later-failing Future is isolated', () async {
+      Future<void> later() async {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+        throw StateError('late boom');
+      }
+
+      await run((_) => later());
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    });
   });
 }

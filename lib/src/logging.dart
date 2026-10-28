@@ -56,6 +56,9 @@ class AuthLogEntry {
 }
 
 /// Receives [AuthLogEntry] values. The sink is yours, e.g. `debugPrint`.
+///
+/// The sink is invoked synchronously and inline on the request path, so it
+/// should return quickly (hand slow work off, do not await it).
 class AuthLogger {
   /// Called once per HTTP attempt; errors thrown by it are swallowed.
   final void Function(AuthLogEntry entry) sink;
