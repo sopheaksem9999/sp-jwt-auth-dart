@@ -14,7 +14,8 @@ class MfaModule {
   /// Lists available MFA challenge methods for [challengeId].
   Future<List<String>> listMethods({required String challengeId}) async {
     final uri = auth.endpointUri('/auth/mfa/methods');
-    final response = await auth.dio.get<dynamic>(
+    final response = await auth.send(
+      'GET',
       uri.toString(),
       queryParameters: {'challenge_id': challengeId},
       options: Options(headers: {'Accept': 'application/json'}),
@@ -35,7 +36,8 @@ class MfaModule {
     required String method,
   }) async {
     final uri = auth.endpointUri('/auth/mfa/challenge');
-    final response = await auth.dio.post<dynamic>(
+    final response = await auth.send(
+      'POST',
       uri.toString(),
       data: {'challenge_id': challengeId, 'method': method},
       options: Options(headers: {'Accept': 'application/json'}),
@@ -51,7 +53,8 @@ class MfaModule {
     required String code,
   }) async {
     final uri = auth.endpointUri('/auth/mfa/verify');
-    final response = await auth.dio.post<dynamic>(
+    final response = await auth.send(
+      'POST',
       uri.toString(),
       data: {'challenge_id': challengeId, 'code': code},
       options: Options(headers: {'Accept': 'application/json'}),

@@ -22,7 +22,8 @@ class OtpModule {
     Map<String, dynamic> body, {
     required bool keepPreviousId,
   }) async {
-    final response = await auth.dio.post<dynamic>(
+    final response = await auth.send(
+      'POST',
       auth.endpointUri(path).toString(),
       data: body,
       options: Options(headers: {'Accept': 'application/json'}),
@@ -59,7 +60,8 @@ class OtpModule {
     required String code,
   }) async {
     final uri = auth.endpointUri(auth.endpoints.otpVerify);
-    final response = await auth.dio.post<dynamic>(
+    final response = await auth.send(
+      'POST',
       uri.toString(),
       data:
           auth.otpOptions.verifyBody?.call(identifier, code, _challengeId) ??

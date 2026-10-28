@@ -63,6 +63,25 @@ final auth = SpJwtAuth(
 await auth.restore();
 ```
 
+## Request logging
+
+Off by default. Set a logger and the global switch to get one line per HTTP
+attempt the package makes (login, refresh, logout, whoami, OTP, MFA, sessions,
+account):
+
+```dart
+final auth = SpJwtAuth(
+  // ...
+  logger: AuthLogger(sink: (e) => debugPrint('$e')),
+  logRequests: true,
+);
+// POST /auth/login -> 200 85ms rid=abc attempt=1
+```
+
+Bodies, headers and query strings are never logged: `AuthLogEntry` has no field
+for them. The sink is yours (`debugPrint`, `print`, your own logger); errors it
+throws are swallowed and never affect the request.
+
 ## Flutter mobile
 
 Persistent storage on a device needs a platform keychain. The core package stays pure Dart, so it ships the storage seam and the Flutter pieces live in a companion package.

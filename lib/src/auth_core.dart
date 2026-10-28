@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'package:meta/meta.dart';
 import 'package:dio/dio.dart';
 import 'claims.dart';
 import 'endpoints.dart';
 import 'envelope.dart';
 import 'errors.dart';
 import 'interceptor.dart';
+import 'logging.dart';
 import 'modules/account_module.dart';
 import 'modules/mfa_module.dart';
 import 'modules/otp_module.dart';
@@ -54,6 +56,13 @@ class SpJwtAuth {
   /// HTTP client used for auth requests.
   final Dio dio;
 
+  /// Optional sink for request log entries (see [logRequests]).
+  final AuthLogger? logger;
+
+  /// Global switch: entries are produced only when this is `true` and a
+  /// [logger] is set. Bodies, headers and query strings are never logged.
+  final bool logRequests;
+
   final StreamController<AuthState> _stateController =
       StreamController<AuthState>.broadcast();
   final StreamController<AuthEvent> _eventsController =
@@ -94,6 +103,8 @@ class SpJwtAuth {
     BrowserCookieEnv? cookieEnv,
     RefreshLock? refreshLock,
     Dio? dio,
+    this.logger,
+    this.logRequests = false,
   }) : otpOptions = otpOptions ?? const OtpOptions(),
        _cookieEnv = cookieEnv ?? defaultCookieEnv(),
        _refreshLock = refreshLock ?? InProcessRefreshLock(),
@@ -128,6 +139,159 @@ class SpJwtAuth {
           _notifyListeners();
         }
       });
+    }
+  }
+
+  /// Single entry point for every HTTP call made by this package.
+  ///
+  /// Behaves exactly like the matching `dio.get/post/put/delete` call. When
+  /// [logger] is set and [logRequests] is true it also delivers one
+  /// [AuthLogEntry] per call; delivery errors are swallowed.
+  @internal
+  Future<Response<dynamic>> send(
+    String method,
+    String url, {
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+    Options? options,
+    CancelToken? cancelToken,
+    int attempt = 1,
+  }) async {
+    final log = logger;
+    if (log == null || !logRequests) {
+      return _dispatch(
+        method,
+        url,
+        data,
+        queryParameters,
+        options,
+        cancelToken,
+      );
+    }
+    final sw = Stopwatch()..start();
+    final path = Uri.tryParse(url)?.path ?? '';
+    final m = method.toUpperCase();
+    try {
+      final response = await _dispatch(
+        method,
+        url,
+        data,
+        queryParameters,
+        options,
+        cancelToken,
+      );
+      sw.stop();
+      final body = response.data;
+      SpAuthErrorCode? code;
+      int? errorCode;
+      String? rid = response.headers.value('x-request-id');
+      if (body is Map<String, dynamic>) {
+        if (body['success'] == false) {
+          code = SpAuthErrorCode.unauthenticated;
+          final ec = body['error_code'];
+          errorCode = ec is int ? ec : (ec is String ? int.tryParse(ec) : null);
+        }
+        final meta = body['meta'];
+        if (rid == null && meta is Map && meta['request_id'] != null) {
+          rid = meta['request_id'].toString();
+        }
+      }
+      _deliver(
+        log,
+        AuthLogEntry(
+          method: m,
+          path: path,
+          status: response.statusCode,
+          duration: sw.elapsed,
+          requestId: rid,
+          attempt: attempt,
+          code: code,
+          errorCode: errorCode,
+        ),
+      );
+      return response;
+    } on DioException catch (e) {
+      sw.stop();
+      final body = e.response?.data;
+      String? rid = e.response?.headers.value('x-request-id');
+      int? errorCode;
+      if (body is Map<String, dynamic>) {
+        final ec = body['error_code'];
+        errorCode = ec is int ? ec : (ec is String ? int.tryParse(ec) : null);
+        final meta = body['meta'];
+        if (rid == null && meta is Map && meta['request_id'] != null) {
+          rid = meta['request_id'].toString();
+        }
+      }
+      SpAuthErrorCode? code;
+      try {
+        code = _classifyDioError(e).code;
+      } catch (_) {}
+      _deliver(
+        log,
+        AuthLogEntry(
+          method: m,
+          path: path,
+          status: e.response?.statusCode,
+          duration: sw.elapsed,
+          requestId: rid,
+          attempt: attempt,
+          code: code,
+          errorCode: errorCode,
+        ),
+      );
+      rethrow;
+    }
+  }
+
+  Future<Response<dynamic>> _dispatch(
+    String method,
+    String url,
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+    Options? options,
+    CancelToken? cancelToken,
+  ) {
+    switch (method.toUpperCase()) {
+      case 'GET':
+        return dio.get<dynamic>(
+          url,
+          queryParameters: queryParameters,
+          options: options,
+          cancelToken: cancelToken,
+        );
+      case 'PUT':
+        return dio.put<dynamic>(
+          url,
+          data: data,
+          queryParameters: queryParameters,
+          options: options,
+          cancelToken: cancelToken,
+        );
+      case 'DELETE':
+        return dio.delete<dynamic>(
+          url,
+          data: data,
+          queryParameters: queryParameters,
+          options: options,
+          cancelToken: cancelToken,
+        );
+      default:
+        return dio.post<dynamic>(
+          url,
+          data: data,
+          queryParameters: queryParameters,
+          options: options,
+          cancelToken: cancelToken,
+        );
+    }
+  }
+
+  void _deliver(AuthLogger log, AuthLogEntry entry) {
+    try {
+      log.sink(entry);
+    } catch (_) {
+      // A faulty sink must never change the request outcome.
     }
   }
 
@@ -342,9 +506,13 @@ class SpJwtAuth {
       final refreshUri = endpointUri(endpoints.refresh);
       _csrfToken ??= _cookieEnv.getCookie(csrf.cookie);
 
+      var refreshAttempt = 0;
       Future<Response<dynamic>> sendRefreshRequest(String? csrfVal) {
-        return dio.post<dynamic>(
+        refreshAttempt++;
+        return send(
+          'POST',
           refreshUri.toString(),
+          attempt: refreshAttempt,
           data: isCookie ? null : {'refresh_token': rt},
           options: Options(
             extra: {if (isCookie) 'withCredentials': true},
@@ -579,7 +747,8 @@ class SpJwtAuth {
   /// or [AuthenticatedResult] upon successful login.
   Future<LoginResult> login(Map<String, dynamic> credentials) async {
     final uri = endpointUri(endpoints.login);
-    final response = await dio.post<dynamic>(
+    final response = await send(
+      'POST',
       uri.toString(),
       data: credentials,
       options: Options(headers: {'Accept': 'application/json'}),
@@ -613,7 +782,8 @@ class SpJwtAuth {
   Future<Map<String, dynamic>> whoami() async {
     final hdrs = await headers();
     final uri = endpointUri(endpoints.whoami);
-    final response = await dio.get<dynamic>(
+    final response = await send(
+      'GET',
       uri.toString(),
       options: Options(headers: {'Accept': 'application/json', ...hdrs}),
     );
@@ -644,7 +814,8 @@ class SpJwtAuth {
     final currentAt = _cachedSession?.accessToken;
     try {
       final uri = endpointUri(endpoints.logout);
-      await dio.post<dynamic>(
+      await send(
+        'POST',
         uri.toString(),
         data: currentRt != null ? {'refresh_token': currentRt} : null,
         options: Options(

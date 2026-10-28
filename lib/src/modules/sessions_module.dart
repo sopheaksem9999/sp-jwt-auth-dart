@@ -13,7 +13,8 @@ class SessionsModule {
   Future<List<Map<String, dynamic>>> list() async {
     final hdrs = await auth.headers();
     final uri = auth.endpointUri('/auth/sessions');
-    final response = await auth.dio.get<dynamic>(
+    final response = await auth.send(
+      'GET',
       uri.toString(),
       options: Options(headers: {'Accept': 'application/json', ...hdrs}),
     );
@@ -31,7 +32,8 @@ class SessionsModule {
   Future<void> revoke(String sessionId) async {
     final hdrs = await auth.headers();
     final uri = auth.endpointUri('/auth/sessions/$sessionId');
-    await auth.dio.delete<dynamic>(
+    await auth.send(
+      'DELETE',
       uri.toString(),
       options: Options(headers: {'Accept': 'application/json', ...hdrs}),
     );
@@ -41,7 +43,8 @@ class SessionsModule {
   Future<void> revokeOthers() async {
     final hdrs = await auth.headers();
     final uri = auth.endpointUri('/auth/sessions/revoke-others');
-    await auth.dio.post<dynamic>(
+    await auth.send(
+      'POST',
       uri.toString(),
       options: Options(headers: {'Accept': 'application/json', ...hdrs}),
     );

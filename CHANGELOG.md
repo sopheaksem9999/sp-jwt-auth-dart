@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added: optional request logging (D2). `SpJwtAuth(logger: AuthLogger(sink: ...), logRequests: true)` delivers one `AuthLogEntry` (method, path without query, status, duration, request id, attempt, code, errorCode) per HTTP attempt of login, refresh, logout, whoami, OTP, MFA, sessions and account calls. Off by default; bodies, headers and query strings are never logged; a throwing sink is swallowed. All package HTTP calls now go through one internal helper `SpJwtAuth.send`.
 - Fixed: a token refresh whose response carries no `user` (the documented shape) no longer drops the stored user; the previous user is carried into the stored session, the `Refreshed` event, `state` and the tab broadcast, so `currentSession.user` and `restore()` keep it. A `user` in the response still replaces the old one (R2).
 - Added: `Endpoints.relativeToBase` (default `false`, behavior unchanged) joins endpoint paths beneath the `baseUrl` path, e.g. `https://h/api/v1` + `/auth/login`; new public `SpJwtAuth.endpointUri(path)` is used by the core and all modules (J2).
 - Added: `Endpoints.parseSession` is now optional; the default parses `{success, data: {...}}` envelopes and flat bodies via `StoredSession.fromEnvelope`, deriving `expiresAt` from `expires_in` (J3).
