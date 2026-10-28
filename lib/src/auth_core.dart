@@ -144,7 +144,8 @@ class SpJwtAuth {
 
   /// Single entry point for every HTTP call made by this package.
   ///
-  /// Behaves exactly like the matching `dio.get/post/put/delete` call. When
+  /// Behaves exactly like the matching `dio.get/post/put/delete` call; any
+  /// other [method] throws [ArgumentError] and sends nothing. When
   /// [logger] is set and [logRequests] is true it also delivers one
   /// [AuthLogEntry] per call; delivery errors are swallowed.
   @internal
@@ -186,7 +187,7 @@ class SpJwtAuth {
         final body = response.data;
         SpAuthErrorCode? code;
         int? errorCode;
-        String? rid = response.headers.value('x-request-id');
+        Object? metaId;
         if (body is Map<String, dynamic>) {
           if (body['success'] == false) {
             code = SpAuthErrorCode.unauthenticated;
@@ -196,10 +197,11 @@ class SpJwtAuth {
                 : (ec is String ? int.tryParse(ec) : null);
           }
           final meta = body['meta'];
-          if (rid == null && meta is Map && meta['request_id'] != null) {
-            rid = meta['request_id'].toString();
-          }
+          if (meta is Map) metaId = meta['request_id'];
         }
+        final rid =
+            _cleanRequestId(response.headers.value('x-request-id')) ??
+            _cleanRequestId(metaId);
         _emit(
           log,
           () => AuthLogEntry(
@@ -207,7 +209,7 @@ class SpJwtAuth {
             path: path,
             status: response.statusCode,
             duration: sw.elapsed,
-            requestId: _cleanRequestId(rid),
+            requestId: rid,
             attempt: attempt,
             code: code,
             errorCode: errorCode,
@@ -219,16 +221,17 @@ class SpJwtAuth {
       sw.stop();
       try {
         final body = e.response?.data;
-        String? rid = e.response?.headers.value('x-request-id');
+        Object? metaId;
         int? errorCode;
         if (body is Map<String, dynamic>) {
           final ec = body['error_code'];
           errorCode = ec is int ? ec : (ec is String ? int.tryParse(ec) : null);
           final meta = body['meta'];
-          if (rid == null && meta is Map && meta['request_id'] != null) {
-            rid = meta['request_id'].toString();
-          }
+          if (meta is Map) metaId = meta['request_id'];
         }
+        final rid =
+            _cleanRequestId(e.response?.headers.value('x-request-id')) ??
+            _cleanRequestId(metaId);
         SpAuthErrorCode? code;
         try {
           code = _classifyDioError(e).code;
@@ -240,7 +243,7 @@ class SpJwtAuth {
             path: path,
             status: e.response?.statusCode,
             duration: sw.elapsed,
-            requestId: _cleanRequestId(rid),
+            requestId: rid,
             attempt: attempt,
             code: code,
             errorCode: errorCode,
@@ -283,13 +286,20 @@ class SpJwtAuth {
           options: options,
           cancelToken: cancelToken,
         );
-      default:
+      case 'POST':
         return dio.post<dynamic>(
           url,
           data: data,
           queryParameters: queryParameters,
           options: options,
           cancelToken: cancelToken,
+        );
+      default:
+        // Never turn an unknown method into a POST.
+        throw ArgumentError.value(
+          method,
+          'method',
+          'must be GET, POST, PUT or DELETE',
         );
     }
   }
@@ -312,15 +322,21 @@ class SpJwtAuth {
     }
   }
 
-  static final RegExp _controlChars = RegExp(r'[\u0000-\u001f\u007f-\u009f]');
+  // Same rule as sp_laravel_api's sanitiseRequestId: C0, DEL, C1, U+2028
+  // and U+2029.
+  static final RegExp _controlChars = RegExp(
+    '[\u0000-\u001f\u007f-\u009f\u2028\u2029]',
+  );
 
-  /// Caps a server-supplied request id at 128 characters and strips C0/C1
-  /// control characters, so it cannot inject lines or bloat logs.
-  static String? _cleanRequestId(String? raw) {
-    if (raw == null) return null;
+  /// Cleans a server-supplied request id so it cannot inject lines or bloat
+  /// logs: only a `String` is accepted, control characters and U+2028/U+2029
+  /// are stripped, the rest is cut to 128 code points (never inside a
+  /// surrogate pair) and trimmed; `null` when nothing is left.
+  static String? _cleanRequestId(Object? raw) {
+    if (raw is! String) return null;
     final cleaned = raw.replaceAll(_controlChars, '');
-    final capped = cleaned.length > 128 ? cleaned.substring(0, 128) : cleaned;
-    return capped.isEmpty ? null : capped;
+    final s = String.fromCharCodes(cleaned.runes.take(128)).trim();
+    return s.isEmpty ? null : s;
   }
 
   /// Resolves an endpoint [path] against [baseUrl], honouring

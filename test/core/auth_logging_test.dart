@@ -404,6 +404,52 @@ void main() {
       expectClean(entries.single);
     });
 
+    Future<String?> metaId(Object? id) async {
+      final entries = <AuthLogEntry>[];
+      final auth = _auth(
+        _Adapter(
+          (_) => _ok({
+            'success': true,
+            'data': {
+              'access_token': 'at-secret',
+              'refresh_token': 'rt-secret',
+              'expires_at': 4102444800,
+              'user': {'id': 1},
+            },
+            'meta': {'request_id': id},
+          }),
+        ),
+        logger: AuthLogger(sink: entries.add),
+        logRequests: true,
+      );
+      await auth.login({'email': 'ada@example.com', 'password': 'pw'});
+      return entries.single.requestId;
+    }
+
+    test('never splits a surrogate pair at the cut', () async {
+      // 127 ASCII + one astral character at the cap: kept whole, no split.
+      final atCap = '${'a' * 127}\u{1F600}';
+      final out = await metaId('${atCap}zzz');
+      expect(out, atCap);
+      expect(out!.runes.length, 128);
+      expect(out.codeUnits.last, 0xde00);
+      final emoji = await metaId('\u{1F600}' * 200);
+      expect(emoji!.runes.length, 128);
+      expect(emoji, '\u{1F600}' * 128);
+    });
+
+    test('strips U+2028 and U+2029 and trims', () async {
+      expect(await metaId(' a\u2028b\u2029c '), 'abc');
+      expect(await metaId('\u2028\u2029 '), isNull);
+    });
+
+    test('a non-string request id is null', () async {
+      expect(await metaId(42), isNull);
+      expect(await metaId({'id': 'x'}), isNull);
+      expect(await metaId(['x']), isNull);
+      expect(await metaId(true), isNull);
+    });
+
     test('a normal id is unchanged', () async {
       final entries = <AuthLogEntry>[];
       final auth = _auth(
@@ -414,6 +460,33 @@ void main() {
       await auth.login({'email': 'ada@example.com', 'password': 'pw'});
       expect(entries.single.requestId, 'req-123_AB.c');
     });
+  });
+
+  group('unknown HTTP methods', () {
+    for (final logged in [false, true]) {
+      test('an unknown method throws ArgumentError instead of sending a POST'
+          '${logged ? ' (logging on)' : ''}', () async {
+        final entries = <AuthLogEntry>[];
+        final adapter = _Adapter((_) => _ok());
+        final auth = _auth(
+          adapter,
+          logger: logged ? AuthLogger(sink: entries.add) : null,
+          logRequests: logged,
+        );
+        for (final m in ['PATCH', 'HEAD', 'OPTIONS', 'POSTX', '']) {
+          await expectLater(
+            auth.send(m, 'https://api.example.com/auth/whoami'),
+            throwsArgumentError,
+            reason: m,
+          );
+        }
+        expect(adapter.seen, isEmpty);
+        expect(entries, isEmpty);
+        // the supported methods (any case) still work
+        await auth.send('get', 'https://api.example.com/auth/whoami');
+        expect(adapter.seen.single.method, 'GET');
+      });
+    }
   });
 
   group('async sink isolation', () {
