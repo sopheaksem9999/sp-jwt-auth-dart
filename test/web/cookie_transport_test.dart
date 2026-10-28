@@ -244,6 +244,65 @@ void main() {
   );
 
   test(
+    'the CSRF retry in the refresh engine is logged as attempt 1 then attempt 2',
+    () async {
+      mockEnv.setCookie('sp_csrf', 'initial_bad_csrf');
+      final entries = <AuthLogEntry>[];
+      final auth = SpJwtAuth(
+        baseUrl: Uri.parse('https://api.example.com'),
+        endpoints: createEndpoints(),
+        store: store,
+        dio: mockDio,
+        transport: Transport.cookie,
+        cookieEnv: mockEnv,
+        logger: AuthLogger(sink: entries.add),
+        logRequests: true,
+      );
+
+      var refreshAttempts = 0;
+      responseHandler = (options) async {
+        refreshAttempts++;
+        if (refreshAttempts == 1) {
+          mockEnv.setCookie('sp_csrf', 'live_updated_csrf');
+          throw DioException(
+            requestOptions: options,
+            response: Response<dynamic>(
+              requestOptions: options,
+              statusCode: 403,
+              data: {'code': 'csrf_failed', 'message': 'CSRF token mismatch'},
+            ),
+            type: DioExceptionType.badResponse,
+          );
+        }
+        return Response<dynamic>(
+          requestOptions: options,
+          statusCode: 200,
+          data: {
+            'success': true,
+            'data': {
+              'access_token': 'csrf_recovered_token',
+              'expires_at':
+                  DateTime.now()
+                      .toUtc()
+                      .add(const Duration(hours: 1))
+                      .millisecondsSinceEpoch ~/
+                  1000,
+            },
+          },
+        );
+      };
+
+      expect(await auth.accessToken(), equals('csrf_recovered_token'));
+      expect(
+        entries.map((e) => (e.method, e.path, e.status, e.attempt)).toList(),
+        [('POST', '/auth/refresh', 403, 1), ('POST', '/auth/refresh', 200, 2)],
+      );
+      expect(entries.first.code, isNotNull);
+      expect(entries.last.code, isNull);
+    },
+  );
+
+  test(
     'broadcastGraceMs defaults to 100ms on cookie transport configuration',
     () {
       const config = CookieTransportConfig();

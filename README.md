@@ -82,6 +82,24 @@ Bodies, headers and query strings are never logged: `AuthLogEntry` has no field
 for them. The sink is yours (`debugPrint`, `print`, your own logger); errors it
 throws are swallowed and never affect the request.
 
+What to know before you ship it:
+
+- Paths are logged verbatim: a session id in a path (`/auth/sessions/<id>`)
+  appears as is in `path`.
+- The sink runs inline, on the request path, so keep it quick and hand slow
+  work off without awaiting it.
+- Only calls made by this package are logged. App requests that
+  `SpJwtAuthInterceptor` replays after a 401 are not; the refresh call it
+  triggers is.
+- `attempt` counts the HTTP attempts of one call: a refresh retried after a
+  CSRF failure (cookie transport) is logged as attempt 1, then attempt 2.
+- `code` classifies the HTTP response, not the error the caller gets: every
+  `success: false` envelope is logged as `unauthenticated`, so a refresh
+  answered with `error_code` 10002 shows `unauthenticated` while the caller
+  gets `refreshReuseDetected`.
+- A method other than GET, POST, PUT or DELETE passed to `SpJwtAuth.send`
+  throws `ArgumentError`; nothing is sent or logged.
+
 ## Flutter mobile
 
 Persistent storage on a device needs a platform keychain. The core package stays pure Dart, so it ships the storage seam and the Flutter pieces live in a companion package.
