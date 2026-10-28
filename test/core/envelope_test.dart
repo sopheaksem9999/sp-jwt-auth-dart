@@ -107,6 +107,7 @@ void main() {
         endpoints: const Endpoints(otpResend: '/auth/otp/resend'),
         store: store,
         otpOptions: OtpOptions(
+          sendBody: (id, channel) => {'to': id},
           challengeIdFrom: (_) {
             captured++;
             return 'stale';

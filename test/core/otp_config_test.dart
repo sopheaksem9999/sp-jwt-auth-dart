@@ -58,24 +58,92 @@ void main() {
     );
   }
 
+  Map<String, dynamic> sendOk() => {
+    'otp_id': 'otp-1',
+    'destination_masked': 'a***@example.com',
+    'expires_in': 300,
+  };
+
+  test('defaults post to /otp/request and /otp/verify', () async {
+    final auth = build();
+    await auth.otp.sendOtp(identifier: 'a@example.com', channel: 'email');
+    await auth.otp.verifyOtp(identifier: 'a@example.com', code: '123456');
+    expect(adapter.requests[0].uri.path, '/otp/request');
+    expect(adapter.requests[1].uri.path, '/otp/verify');
+  });
+
+  test('send body is {destination, channel, purpose}', () async {
+    final auth = build();
+    await auth.otp.sendOtp(identifier: 'a@example.com', channel: 'email');
+    expect(adapter.requests[0].data, {
+      'destination': 'a@example.com',
+      'channel': 'email',
+      'purpose': 'login',
+    });
+    await auth.otp.sendOtp(
+      identifier: 'a@example.com',
+      channel: 'email',
+      purpose: 'signup',
+    );
+    expect((adapter.requests[1].data as Map)['purpose'], 'signup');
+  });
+
   test(
-    'defaults call /auth/otp/send and /auth/otp/verify with 0.1.0 bodies',
+    'verify body carries otp_id captured from the 202 response (also when nested under data)',
     () async {
-      final auth = build();
+      var auth = build(
+        handler: (o) => o.path.contains('verify') ? _session() : sendOk(),
+      );
       await auth.otp.sendOtp(identifier: 'a@example.com', channel: 'email');
       await auth.otp.verifyOtp(identifier: 'a@example.com', code: '123456');
-      expect(adapter.requests[0].uri.path, '/auth/otp/send');
-      expect(adapter.requests[0].data, {
-        'identifier': 'a@example.com',
+      expect(adapter.requests[1].data, {
+        'otp_id': 'otp-1',
+        'code': '123456',
+        'destination': 'a@example.com',
         'channel': 'email',
       });
-      expect(adapter.requests[1].uri.path, '/auth/otp/verify');
+
+      auth = build(
+        handler: (o) => o.path.contains('verify')
+            ? _session()
+            : {'success': true, 'data': sendOk()},
+      );
+      await auth.otp.sendOtp(identifier: 'a@example.com', channel: 'email');
+      await auth.otp.verifyOtp(identifier: 'a@example.com', code: '123456');
+      expect((adapter.requests[1].data as Map)['otp_id'], 'otp-1');
+    },
+  );
+
+  test(
+    'resend default posts to /otp/resend with otp_id, destination, channel',
+    () async {
+      final auth = build(
+        handler: (o) => o.path.contains('verify') ? _session() : sendOk(),
+      );
+      await auth.otp.sendOtp(identifier: 'a@example.com', channel: 'email');
+      await auth.otp.resendOtp(identifier: 'a@example.com');
+      expect(adapter.requests[1].uri.path, '/otp/resend');
       expect(adapter.requests[1].data, {
-        'identifier': 'a@example.com',
-        'code': '123456',
+        'otp_id': 'otp-1',
+        'destination': 'a@example.com',
+        'channel': 'email',
       });
     },
   );
+
+  test('old paths still work when set explicitly', () async {
+    final auth = build(
+      endpoints: const Endpoints(
+        otpSend: '/auth/otp/send',
+        otpVerify: '/auth/otp/verify',
+        otpResend: '/auth/otp/resend',
+      ),
+    );
+    await auth.otp.sendOtp(identifier: 'a@example.com', channel: 'email');
+    await auth.otp.verifyOtp(identifier: 'a@example.com', code: '1');
+    expect(adapter.requests[0].uri.path, '/auth/otp/send');
+    expect(adapter.requests[1].uri.path, '/auth/otp/verify');
+  });
 
   test('custom otpSend/otpVerify paths are called', () async {
     final auth = build(
@@ -136,7 +204,15 @@ void main() {
     expect(identical(auth.otp, auth.otp), isTrue);
   });
 
-  test('resendOtp without otpResend throws StateError', () async {
+  test('resendOtp with otpResend null throws StateError', () async {
+    final auth = build(endpoints: const Endpoints(otpResend: null));
+    await expectLater(
+      auth.otp.resendOtp(identifier: 'a'),
+      throwsA(isA<StateError>()),
+    );
+  });
+
+  test('resendOtp before any send throws StateError', () async {
     final auth = build();
     await expectLater(
       auth.otp.resendOtp(identifier: 'a'),
@@ -144,10 +220,13 @@ void main() {
     );
   });
 
-  test('resendOtp with otpResend posts to that path', () async {
-    final auth = build(endpoints: const Endpoints(otpResend: '/x/resend'));
+  test('resendOtp with custom path and sendBody builder overrides', () async {
+    final auth = build(
+      endpoints: const Endpoints(otpResend: '/x/resend'),
+      otpOptions: OtpOptions(sendBody: (id, channel) => {'to': id}),
+    );
     await auth.otp.resendOtp(identifier: 'a');
     expect(adapter.requests.single.uri.path, '/x/resend');
-    expect(adapter.requests.single.data, {'identifier': 'a'});
+    expect(adapter.requests.single.data, {'to': 'a'});
   });
 }

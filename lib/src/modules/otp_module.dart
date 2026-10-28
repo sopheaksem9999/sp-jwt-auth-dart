@@ -12,10 +12,27 @@ class OtpModule {
   OtpModule(this.auth);
 
   String? _challengeId;
+  String? _channel;
 
-  Map<String, dynamic> _sendBody(String identifier, String? channel) =>
+  static String? _defaultChallengeIdFrom(dynamic body) {
+    if (body is! Map) return null;
+    final data = body['data'];
+    final raw = body['otp_id'] ?? (data is Map ? data['otp_id'] : null);
+    final id = raw?.toString();
+    return (id == null || id.isEmpty) ? null : id;
+  }
+
+  Map<String, dynamic> _sendBody(
+    String identifier,
+    String? channel,
+    String purpose,
+  ) =>
       auth.otpOptions.sendBody?.call(identifier, channel) ??
-      {'identifier': identifier, if (channel != null) 'channel': channel};
+      {
+        'destination': identifier,
+        if (channel != null) 'channel': channel,
+        'purpose': purpose,
+      };
 
   Future<void> _post(
     String path,
@@ -29,29 +46,52 @@ class OtpModule {
       options: Options(headers: {'Accept': 'application/json'}),
     );
     throwIfEnvelopeFailure(response.data);
-    final capture = auth.otpOptions.challengeIdFrom;
-    if (capture != null) {
-      final id = capture(response.data);
-      _challengeId = keepPreviousId ? (id ?? _challengeId) : id;
-    }
+    final capture = auth.otpOptions.challengeIdFrom ?? _defaultChallengeIdFrom;
+    final id = capture(response.data);
+    _challengeId = keepPreviousId ? (id ?? _challengeId) : id;
   }
 
-  /// Requests an OTP to be sent to the given [identifier] via optional [channel].
-  Future<void> sendOtp({required String identifier, String? channel}) => _post(
-    auth.endpoints.otpSend,
-    _sendBody(identifier, channel),
-    keepPreviousId: false,
-  );
+  /// Requests an OTP to be sent to the given [identifier] via optional
+  /// [channel] (`email` or `sms`) for [purpose] (default `login`).
+  Future<void> sendOtp({
+    required String identifier,
+    String? channel,
+    String purpose = 'login',
+  }) async {
+    await _post(
+      auth.endpoints.otpSend,
+      _sendBody(identifier, channel, purpose),
+      keepPreviousId: false,
+    );
+    _channel = channel;
+  }
 
   /// Requests the OTP for [identifier] to be sent again.
   ///
-  /// Throws [StateError] when `Endpoints.otpResend` is not configured.
+  /// Uses the challenge id and channel of the last [sendOtp]. Throws
+  /// [StateError] when `Endpoints.otpResend` is null, or when the default body
+  /// is used and no challenge id has been captured yet.
   Future<void> resendOtp({required String identifier}) async {
     final path = auth.endpoints.otpResend;
     if (path == null) {
       throw StateError('Endpoints.otpResend is not configured');
     }
-    await _post(path, _sendBody(identifier, null), keepPreviousId: true);
+    final builder = auth.otpOptions.sendBody;
+    final Map<String, dynamic> body;
+    if (builder != null) {
+      body = builder(identifier, _channel);
+    } else {
+      final id = _challengeId;
+      if (id == null) {
+        throw StateError('No OTP challenge to resend; call sendOtp first');
+      }
+      body = {
+        'otp_id': id,
+        'destination': identifier,
+        if (_channel != null) 'channel': _channel,
+      };
+    }
+    await _post(path, body, keepPreviousId: true);
   }
 
   /// Verifies an OTP [code] for [identifier], storing the resulting session on success.
@@ -65,7 +105,12 @@ class OtpModule {
       uri.toString(),
       data:
           auth.otpOptions.verifyBody?.call(identifier, code, _challengeId) ??
-          {'identifier': identifier, 'code': code},
+          {
+            if (_challengeId != null) 'otp_id': _challengeId,
+            'code': code,
+            'destination': identifier,
+            if (_channel != null) 'channel': _channel,
+          },
       options: Options(headers: {'Accept': 'application/json'}),
     );
     final data = response.data;
@@ -83,6 +128,7 @@ class OtpModule {
     final session = auth.endpoints.parseSession(data);
     await auth.store.write(session);
     _challengeId = null;
+    _channel = null;
     await auth.restore();
     return AuthenticatedResult(session);
   }

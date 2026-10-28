@@ -21,14 +21,16 @@ class Endpoints {
   /// Path for fetching current user profile (default `/auth/whoami`).
   final String whoami;
 
-  /// Path for sending a one-time password (default `/auth/otp/send`).
+  /// Path for requesting a one-time password (default `/otp/request`).
+  ///
+  /// The 0.1.0 default was `/auth/otp/send`; pass it explicitly to keep it.
   final String otpSend;
 
-  /// Path for verifying a one-time password (default `/auth/otp/verify`).
+  /// Path for verifying a one-time password (default `/otp/verify`).
   final String otpVerify;
 
-  /// Path for resending a one-time password; null (default) disables
-  /// `OtpModule.resendOtp`.
+  /// Path for resending a one-time password (default `/otp/resend`); null
+  /// disables `OtpModule.resendOtp`.
   final String? otpResend;
 
   /// Whether endpoint paths are joined beneath the path of `baseUrl`
@@ -46,9 +48,9 @@ class Endpoints {
     this.refresh = '/auth/refresh',
     this.logout = '/auth/logout',
     this.whoami = '/auth/whoami',
-    this.otpSend = '/auth/otp/send',
-    this.otpVerify = '/auth/otp/verify',
-    this.otpResend,
+    this.otpSend = '/otp/request',
+    this.otpVerify = '/otp/verify',
+    this.otpResend = '/otp/resend',
     this.relativeToBase = false,
     this.parseSession = _defaultParseSession,
   });
@@ -59,7 +61,9 @@ StoredSession _defaultParseSession(dynamic body) =>
 
 /// Customizes OTP request bodies and challenge-id handling.
 ///
-/// Every field is optional; the defaults reproduce the 0.1.0 request bodies.
+/// Every field is optional; the defaults follow the backend OTP contract
+/// (`{destination, channel, purpose}` to send, `{otp_id, code}` to verify,
+/// `otp_id` read from the send response).
 class OtpOptions {
   /// Builds the send (and resend) request body.
   final Map<String, dynamic> Function(String identifier, String? channel)?

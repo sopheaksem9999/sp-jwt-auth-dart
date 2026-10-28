@@ -140,7 +140,7 @@ void main() {
       '/auth/refresh',
       '/auth/logout',
       '/auth/whoami',
-      '/auth/otp/send',
+      '/otp/request',
       '/auth/mfa/methods',
       '/auth/account/profile',
       '/auth/sessions',
@@ -213,7 +213,7 @@ void main() {
     test('otp send', () async {
       await expectUrl(
         () => OtpModule(auth).sendOtp(identifier: 'a', channel: 'email'),
-        'https://h/api/v1/auth/otp/send',
+        'https://h/api/v1/otp/request',
       );
     });
     test('mfa methods', () async {

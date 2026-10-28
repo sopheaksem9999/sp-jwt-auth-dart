@@ -53,7 +53,7 @@ void main() {
 
   group('OtpModule', () {
     test(
-      'sendOtp posts to /auth/otp/send with identifier and channel',
+      'sendOtp posts to /otp/request with destination, channel and purpose',
       () async {
         final otp = OtpModule(auth);
         responseHandler = (options) async {
@@ -67,16 +67,20 @@ void main() {
         await otp.sendOtp(identifier: 'user@example.com', channel: 'email');
         expect(capturedRequests.length, equals(1));
         final req = capturedRequests.first;
-        expect(req.path, contains('/auth/otp/send'));
+        expect(req.path, contains('/otp/request'));
         expect(
           req.data,
-          equals({'identifier': 'user@example.com', 'channel': 'email'}),
+          equals({
+            'destination': 'user@example.com',
+            'channel': 'email',
+            'purpose': 'login',
+          }),
         );
       },
     );
 
     test(
-      'verifyOtp posts to /auth/otp/verify and stores session on success',
+      'verifyOtp posts to /otp/verify and stores session on success',
       () async {
         final otp = OtpModule(auth);
         responseHandler = (options) async {

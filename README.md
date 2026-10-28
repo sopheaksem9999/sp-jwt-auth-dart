@@ -136,6 +136,8 @@ final auth = SpJwtAuth(
   baseUrl: Uri.parse('https://api.example.com/api/v1'),
   endpoints: const Endpoints(
     relativeToBase: true,
+    otpSend: '/auth/otp/send', // old 0.1.0 paths; defaults are /otp/request, /otp/verify, /otp/resend
+    otpVerify: '/auth/otp/verify',
     otpResend: '/auth/otp/resend',
   ),
   otpOptions: OtpOptions(
@@ -154,6 +156,10 @@ final remove = auth.addListener(() { /* session changed */ });
 ```
 
 `addListener` fires after restore, login, refresh, logout and cross-tab sync, with the snapshot already updated; an exception thrown by one listener does not stop the others. `sp_jwt_auth_flutter` wraps this as a `ChangeNotifier` (`SpAuthListenable`) for `GoRouter(refreshListenable: ...)`. A refresh response without a `user` keeps the previously stored user, so `currentSession.user` and `restore()` still return it after a rotation.
+
+### OTP login
+
+By default OTP follows the backend routes: `sendOtp(identifier:, channel:, purpose: 'login')` posts `{destination, channel, purpose}` to `/otp/request` and keeps the `otp_id` from the 202 response; `verifyOtp` posts `{otp_id, code, destination, channel}` to `/otp/verify`; `resendOtp` posts `{otp_id, destination, channel}` to `/otp/resend`. `Endpoints` paths and `OtpOptions` builders override all of this (for example the pre-0.2 paths `/auth/otp/send` and `/auth/otp/verify`).
 
 ### Endpoint paths: absolute vs relative
 

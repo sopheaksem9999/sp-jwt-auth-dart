@@ -126,13 +126,13 @@ void main() {
             (
               'otp send',
               'POST',
-              '/auth/otp/send',
+              '/otp/request',
               (a) => a.otp.sendOtp(identifier: 'ada@example.com'),
             ),
             (
               'otp verify',
               'POST',
-              '/auth/otp/verify',
+              '/otp/verify',
               (a) async =>
                   a.otp.verifyOtp(identifier: 'ada@example.com', code: '1'),
             ),
