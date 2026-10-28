@@ -489,6 +489,35 @@ void main() {
     }
   });
 
+  group('logged path', () {
+    Future<String> pathOf(String url) async {
+      final entries = <AuthLogEntry>[];
+      final auth = _auth(
+        _Adapter((_) => _ok()),
+        logger: AuthLogger(sink: entries.add),
+        logRequests: true,
+      );
+      await auth.send('GET', url);
+      return entries.single.path;
+    }
+
+    test('the path is capped at 512 code points', () async {
+      final p = await pathOf('https://api.example.com/${'a' * 2000}?q=1');
+      expect(p.runes.length, 512);
+      expect(p, '/${'a' * 511}');
+    });
+
+    test('a long percent-encoded path is capped too', () async {
+      final p = await pathOf('https://api.example.com/${'\u{1F600}' * 300}');
+      expect(p.runes.length, 512);
+      expect(p, startsWith('/%F0%9F%98%80'));
+    });
+
+    test('an empty path is logged as /', () async {
+      expect(await pathOf('https://api.example.com'), '/');
+    });
+  });
+
   group('async sink isolation', () {
     Future<void> run(Object? Function(AuthLogEntry) sink) async {
       final uncaught = <Object>[];

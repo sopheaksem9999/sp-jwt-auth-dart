@@ -170,7 +170,7 @@ class SpJwtAuth {
       );
     }
     final sw = Stopwatch()..start();
-    final path = Uri.tryParse(url)?.path ?? '';
+    final path = _cleanPath(Uri.tryParse(url)?.path);
     final m = method.toUpperCase();
     try {
       final response = await _dispatch(
@@ -332,10 +332,17 @@ class SpJwtAuth {
   /// logs: only a `String` is accepted, control characters and U+2028/U+2029
   /// are stripped, the rest is cut to 128 code points (never inside a
   /// surrogate pair) and trimmed; `null` when nothing is left.
-  static String? _cleanRequestId(Object? raw) {
+  static String? _cleanRequestId(Object? raw) => _clean(raw, 128);
+
+  /// The logged path, cleaned like sp-jwt-auth-js: control characters and
+  /// U+2028/U+2029 stripped, cut to 512 code points (never inside a surrogate
+  /// pair) and trimmed; `/` when nothing is left.
+  static String _cleanPath(String? raw) => _clean(raw, 512) ?? '/';
+
+  static String? _clean(Object? raw, int max) {
     if (raw is! String) return null;
     final cleaned = raw.replaceAll(_controlChars, '');
-    final s = String.fromCharCodes(cleaned.runes.take(128)).trim();
+    final s = String.fromCharCodes(cleaned.runes.take(max)).trim();
     return s.isEmpty ? null : s;
   }
 
