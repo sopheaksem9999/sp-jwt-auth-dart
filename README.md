@@ -116,7 +116,7 @@ auth.isAuthenticated; auth.userId; auth.currentSession; auth.accessTokenSync;
 final remove = auth.addListener(() { /* session changed */ });
 ```
 
-`addListener` fires after restore, login, refresh, logout and cross-tab sync, with the snapshot already updated; an exception thrown by one listener does not stop the others. `sp_jwt_auth_flutter` wraps this as a `ChangeNotifier` (`SpAuthListenable`) for `GoRouter(refreshListenable: ...)`.
+`addListener` fires after restore, login, refresh, logout and cross-tab sync, with the snapshot already updated; an exception thrown by one listener does not stop the others. `sp_jwt_auth_flutter` wraps this as a `ChangeNotifier` (`SpAuthListenable`) for `GoRouter(refreshListenable: ...)`. A refresh response without a `user` keeps the previously stored user, so `currentSession.user` and `restore()` still return it after a rotation.
 
 ### Endpoint paths: absolute vs relative
 

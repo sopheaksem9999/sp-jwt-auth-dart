@@ -14,6 +14,14 @@ class StoredSession {
     this.user,
   });
 
+  /// Returns a copy with [user] replaced when given; other fields are kept.
+  StoredSession copyWith({Map<String, dynamic>? user}) => StoredSession(
+    accessToken: accessToken,
+    refreshToken: refreshToken,
+    expiresAt: expiresAt,
+    user: user ?? this.user,
+  );
+
   Map<String, dynamic> toJson() => {
     'access_token': accessToken,
     if (refreshToken != null) 'refresh_token': refreshToken,

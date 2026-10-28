@@ -416,7 +416,15 @@ class SpJwtAuth {
         }
 
         throwIfEnvelopeFailure(data);
-        final newSession = endpoints.parseSession(data);
+        var newSession = endpoints.parseSession(data);
+        if (newSession.user == null) {
+          // The documented refresh response carries no user; keep the one we
+          // already have so it survives the rotation and a restart.
+          final previousUser = currentInStore?.user ?? _cachedSession?.user;
+          if (previousUser != null) {
+            newSession = newSession.copyWith(user: previousUser);
+          }
+        }
         await store.write(newSession);
         _cachedSession = newSession;
         _setState(
