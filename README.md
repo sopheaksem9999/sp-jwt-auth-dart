@@ -22,7 +22,7 @@ Add `sp_jwt_auth` to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  sp_jwt_auth: ^0.1.0
+  sp_jwt_auth: ^0.2.0
 ```
 
 Or install from git:
@@ -32,7 +32,7 @@ dependencies:
   sp_jwt_auth:
     git:
       url: https://github.com/sopheaksem9999/sp-jwt-auth-dart.git
-      ref: v0.1.0
+      ref: v0.2.0
 ```
 
 ## Quick Start

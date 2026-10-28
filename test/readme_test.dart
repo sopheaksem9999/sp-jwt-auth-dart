@@ -8,7 +8,7 @@ void main() {
 
   test('README does not pin a beta version', () {
     expect(readme, isNot(contains('^0.1.0-beta')));
-    expect(readme, contains('^0.1.0'));
+    expect(readme, contains('^0.2.0'));
   });
 
   test('README documents the 0.1.x additions', () {

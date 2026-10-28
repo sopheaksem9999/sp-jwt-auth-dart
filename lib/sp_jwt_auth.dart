@@ -13,4 +13,4 @@ export 'src/session.dart';
 export 'src/token_store.dart';
 
 /// Current version of the `sp_jwt_auth` package.
-const String packageVersion = '0.1.0';
+const String packageVersion = '0.2.0';

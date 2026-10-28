@@ -1,6 +1,6 @@
 name: sp_jwt_auth
 description: First-party JWT access and rotating refresh token authentication for Dart and Flutter.
-version: 0.1.0
+version: 0.2.0
 repository: https://github.com/sopheaksem9999/sp-jwt-auth-dart
 issue_tracker: https://github.com/sopheaksem9999/sp-jwt-auth-dart/issues
 topics:
