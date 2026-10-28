@@ -159,7 +159,7 @@ final remove = auth.addListener(() { /* session changed */ });
 
 ### OTP login
 
-By default OTP follows the backend routes: `sendOtp(identifier:, channel:, purpose: 'login')` posts `{destination, channel, purpose}` to `/otp/request` and keeps the `otp_id` from the 202 response; `verifyOtp` posts `{otp_id, code, destination, channel}` to `/otp/verify`; `resendOtp` posts `{otp_id, destination, channel}` to `/otp/resend`. `Endpoints` paths and `OtpOptions` builders override all of this (for example the pre-0.2 paths `/auth/otp/send` and `/auth/otp/verify`).
+By default OTP follows the backend routes: `sendOtp(identifier:, channel:, purpose: 'login')` posts `{destination, channel, purpose}` to `/otp/request` and keeps the `otp_id` from the 202 response; `verifyOtp` posts `{otp_id, code, destination, channel}` to `/otp/verify`; `resendOtp` posts `{otp_id, destination, channel}` to `/otp/resend`. The backend requires `channel` (`email` or `sms`), so `sendOtp` defaults it to `email` and the captured channel is reused for verify and resend. `verifyOtp` and `resendOtp` throw `StateError` when no `otp_id` was captured (for example after an app restart) unless a custom `OtpOptions.verifyBody` / `sendBody` is set. `Endpoints` paths and `OtpOptions` builders override all of this (for example the pre-0.2 paths `/auth/otp/send` and `/auth/otp/verify`).
 
 ### Endpoint paths: absolute vs relative
 

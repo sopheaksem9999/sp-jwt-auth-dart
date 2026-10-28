@@ -84,6 +84,13 @@ void main() {
       () async {
         final otp = OtpModule(auth);
         responseHandler = (options) async {
+          if (options.path.contains('request')) {
+            return Response<dynamic>(
+              requestOptions: options,
+              statusCode: 202,
+              data: {'otp_id': 'o1'},
+            );
+          }
           return Response<dynamic>(
             requestOptions: options,
             statusCode: 200,
@@ -104,6 +111,7 @@ void main() {
           );
         };
 
+        await otp.sendOtp(identifier: 'user@example.com');
         final result = await otp.verifyOtp(
           identifier: 'user@example.com',
           code: '123456',

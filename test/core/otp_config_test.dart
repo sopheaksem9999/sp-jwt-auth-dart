@@ -46,7 +46,7 @@ void main() {
   }) {
     adapter = _Adapter(
       handler ??
-          (o) => o.path.contains('verify') ? _session() : {'success': true},
+          (o) => o.path.contains('verify') ? _session() : {'otp_id': 'otp-1'},
     );
     store = MemoryTokenStore();
     return SpJwtAuth(
@@ -131,6 +131,50 @@ void main() {
     },
   );
 
+  test('channel defaults to email in send, verify and resend bodies', () async {
+    final auth = build();
+    await auth.otp.sendOtp(identifier: 'a@example.com');
+    await auth.otp.resendOtp(identifier: 'a@example.com');
+    await auth.otp.verifyOtp(identifier: 'a@example.com', code: '1');
+    expect((adapter.requests[0].data as Map)['channel'], 'email');
+    expect((adapter.requests[1].data as Map)['channel'], 'email');
+    expect((adapter.requests[2].data as Map)['channel'], 'email');
+  });
+
+  test('verifyOtp without a captured otp_id throws StateError', () async {
+    final auth = build();
+    await expectLater(
+      auth.otp.verifyOtp(identifier: 'a', code: '1'),
+      throwsA(isA<StateError>()),
+    );
+    expect(adapter.requests, isEmpty);
+  });
+
+  test('verifyOtp with a custom verifyBody needs no captured id', () async {
+    final auth = build(
+      otpOptions: OtpOptions(verifyBody: (id, code, ch) => {'c': code}),
+    );
+    await auth.otp.verifyOtp(identifier: 'a', code: '1');
+    expect(adapter.requests.single.data, {'c': '1'});
+  });
+
+  test('a failed send clears the previous challenge id and channel', () async {
+    var fail = false;
+    final auth = build(
+      handler: (o) {
+        if (o.path.contains('verify')) return _session();
+        return fail ? {'success': false, 'message': 'no'} : {'otp_id': 'o1'};
+      },
+    );
+    await auth.otp.sendOtp(identifier: 'a', channel: 'sms');
+    fail = true;
+    await expectLater(auth.otp.sendOtp(identifier: 'a'), throwsA(anything));
+    await expectLater(
+      auth.otp.verifyOtp(identifier: 'a', code: '1'),
+      throwsA(isA<StateError>()),
+    );
+  });
+
   test('old paths still work when set explicitly', () async {
     final auth = build(
       endpoints: const Endpoints(
@@ -188,11 +232,12 @@ void main() {
       ),
     );
     await auth.otp.sendOtp(identifier: 'a');
-    expect(adapter.requests[0].data, {'to': 'a', 'via': 'sms'});
+    expect(adapter.requests[0].data, {'to': 'a', 'via': 'email'});
   });
 
   test('successful verify writes session and state is Authenticated', () async {
     final auth = build();
+    await auth.otp.sendOtp(identifier: 'a');
     final result = await auth.otp.verifyOtp(identifier: 'a', code: '1');
     expect(result, isA<AuthenticatedResult>());
     expect((await store.read())?.accessToken, 'tok');

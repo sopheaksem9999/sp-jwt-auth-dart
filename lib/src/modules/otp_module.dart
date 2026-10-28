@@ -22,17 +22,15 @@ class OtpModule {
     return (id == null || id.isEmpty) ? null : id;
   }
 
+  static const _defaultChannel = 'email';
+
   Map<String, dynamic> _sendBody(
     String identifier,
-    String? channel,
+    String channel,
     String purpose,
   ) =>
       auth.otpOptions.sendBody?.call(identifier, channel) ??
-      {
-        'destination': identifier,
-        if (channel != null) 'channel': channel,
-        'purpose': purpose,
-      };
+      {'destination': identifier, 'channel': channel, 'purpose': purpose};
 
   Future<void> _post(
     String path,
@@ -52,18 +50,20 @@ class OtpModule {
   }
 
   /// Requests an OTP to be sent to the given [identifier] via optional
-  /// [channel] (`email` or `sms`) for [purpose] (default `login`).
+  /// [channel] (`email` or `sms`, default `email`; the backend requires it)
+  /// for [purpose] (default `login`).
   Future<void> sendOtp({
     required String identifier,
-    String? channel,
+    String channel = _defaultChannel,
     String purpose = 'login',
   }) async {
+    _challengeId = null;
+    _channel = channel;
     await _post(
       auth.endpoints.otpSend,
       _sendBody(identifier, channel, purpose),
       keepPreviousId: false,
     );
-    _channel = channel;
   }
 
   /// Requests the OTP for [identifier] to be sent again.
@@ -79,7 +79,7 @@ class OtpModule {
     final builder = auth.otpOptions.sendBody;
     final Map<String, dynamic> body;
     if (builder != null) {
-      body = builder(identifier, _channel);
+      body = builder(identifier, _channel ?? _defaultChannel);
     } else {
       final id = _challengeId;
       if (id == null) {
@@ -88,7 +88,7 @@ class OtpModule {
       body = {
         'otp_id': id,
         'destination': identifier,
-        if (_channel != null) 'channel': _channel,
+        'channel': _channel ?? _defaultChannel,
       };
     }
     await _post(path, body, keepPreviousId: true);
@@ -99,14 +99,18 @@ class OtpModule {
     required String identifier,
     required String code,
   }) async {
+    final custom = auth.otpOptions.verifyBody;
+    if (custom == null && _challengeId == null) {
+      throw StateError('No OTP challenge to verify; call sendOtp first');
+    }
     final uri = auth.endpointUri(auth.endpoints.otpVerify);
     final response = await auth.send(
       'POST',
       uri.toString(),
       data:
-          auth.otpOptions.verifyBody?.call(identifier, code, _challengeId) ??
+          custom?.call(identifier, code, _challengeId) ??
           {
-            if (_challengeId != null) 'otp_id': _challengeId,
+            'otp_id': _challengeId,
             'code': code,
             'destination': identifier,
             if (_channel != null) 'channel': _channel,

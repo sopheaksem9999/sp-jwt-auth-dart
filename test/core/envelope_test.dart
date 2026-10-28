@@ -39,6 +39,9 @@ void main() {
 
   SpJwtAuth createAuth() => SpJwtAuth(
     baseUrl: Uri.parse('https://api.example.com'),
+    otpOptions: OtpOptions(
+      verifyBody: (id, code, challengeId) => {'otp_id': 'o', 'code': code},
+    ),
     endpoints: Endpoints(
       login: '/auth/login',
       refresh: '/auth/refresh',
