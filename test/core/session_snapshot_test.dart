@@ -5,6 +5,8 @@ import 'package:sp_jwt_auth/sp_jwt_auth.dart';
 import 'package:sp_jwt_auth/web.dart';
 import 'package:test/test.dart';
 
+import '../support/until.dart';
+
 String _jwt(String sub) {
   String b(Object o) =>
       base64Url.encode(utf8.encode(jsonEncode(o))).replaceAll('=', '');
@@ -202,9 +204,9 @@ void main() {
       'type': 'refreshed',
       'session': StoredSession(accessToken: 'x').toJson(),
     });
-    await Future<void>.delayed(Duration.zero);
+    await until(() => seen.length == 1);
     other.postMessage({'type': 'logged_out'});
-    await Future<void>.delayed(Duration.zero);
+    await until(() => seen.length == 2);
     expect(seen, ['x', null]);
     await a2.dispose();
     tab.dispose();

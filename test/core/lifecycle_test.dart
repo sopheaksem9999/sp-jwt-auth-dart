@@ -4,6 +4,8 @@ import 'package:dio/dio.dart';
 import 'package:sp_jwt_auth/sp_jwt_auth.dart';
 import 'package:test/test.dart';
 
+import '../support/until.dart';
+
 void main() {
   late MemoryTokenStore store;
   late Dio mockDio;
@@ -83,9 +85,7 @@ void main() {
 
       auth.onResumed();
       // Allow async background refresh to execute
-      for (var i = 0; i < 50 && refreshCount == 0; i++) {
-        await Future<void>.delayed(const Duration(milliseconds: 10));
-      }
+      await until(() => refreshCount > 0);
 
       expect(refreshCount, equals(1));
       expect(await auth.accessToken(), equals('new_on_resumed_token'));

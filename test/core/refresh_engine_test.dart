@@ -4,6 +4,8 @@ import 'package:dio/dio.dart';
 import 'package:sp_jwt_auth/sp_jwt_auth.dart';
 import 'package:test/test.dart';
 
+import '../support/until.dart';
+
 void main() {
   late MemoryTokenStore store;
   late Dio mockDio;
@@ -134,8 +136,8 @@ void main() {
       final events = <AuthEvent>[];
       auth.events.listen(events.add);
 
-      expect(() => auth.accessToken(), throwsA(isA<SpAuthError>()));
-      await Future<void>.delayed(const Duration(milliseconds: 10));
+      await expectLater(auth.accessToken(), throwsA(isA<SpAuthError>()));
+      await until(() => events.whereType<SessionEnded>().isNotEmpty);
 
       expect(await store.read(), isNull);
       expect(auth.state, isA<Anonymous>());
@@ -176,8 +178,8 @@ void main() {
       final events = <AuthEvent>[];
       auth.events.listen(events.add);
 
-      expect(() => auth.accessToken(), throwsA(isA<SpAuthError>()));
-      await Future<void>.delayed(const Duration(milliseconds: 10));
+      await expectLater(auth.accessToken(), throwsA(isA<SpAuthError>()));
+      await until(() => events.whereType<SessionEnded>().isNotEmpty);
 
       expect(await store.read(), isNull);
       expect(auth.state, isA<Anonymous>());
@@ -212,8 +214,8 @@ void main() {
     final events = <AuthEvent>[];
     auth.events.listen(events.add);
 
-    expect(
-      () => auth.accessToken(),
+    await expectLater(
+      auth.accessToken(),
       throwsA(
         isA<SpAuthError>().having(
           (e) => e.code,
@@ -222,6 +224,8 @@ void main() {
         ),
       ),
     );
+    // The failure was awaited above; give a (wrongly) emitted SessionEnded
+    // one 10 ms window to show up before asserting that none did.
     await Future<void>.delayed(const Duration(milliseconds: 10));
 
     // Stored tokens MUST be preserved on transient errors!
