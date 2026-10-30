@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Fix: a refresh answered `200 { success: false }` with a numeric-string `error_code` (`"10010"`, `"10002"`) now ends the session like the int does (`SessionEnded` with `refreshRejected`, `SpAuthError` `refreshReuseDetected` with the parsed `errorCode`). Only an int `error_code` was recognised on that path; the non-2xx path already parsed strings. Same behaviour as `@sokpheak/sp-jwt-auth`.
+
 ## 0.2.0 (2026-10-28)
 
 - BREAKING: OTP defaults now follow the backend routes. `Endpoints.otpSend`/`otpVerify`/`otpResend` default to `/otp/request`, `/otp/verify` and `/otp/resend` (were `/auth/otp/send`, `/auth/otp/verify` and null). `sendOtp` posts `{destination, channel, purpose}` (`channel` now defaults to `email`, the backend requires it; new `purpose` parameter, default `login`), reads `otp_id` from the 202 response (top level or under `data`) and `verifyOtp` posts `{otp_id, code, destination, channel}`; `resendOtp` posts `{otp_id, destination, channel}`; `resendOtp` and `verifyOtp` throw `StateError` if no challenge id was captured (unless custom `OtpOptions` builders are set); a new send attempt clears the previous id and channel. `OtpOptions` builders still override the defaults. To keep the old behavior use `Endpoints(otpSend: '/auth/otp/send', otpVerify: '/auth/otp/verify')` with `OtpOptions` builders returning `{identifier, channel}` / `{identifier, code}`.

@@ -614,7 +614,7 @@ class SpJwtAuth {
         final data = response.data;
         if (data is Map<String, dynamic>) {
           if (data['success'] == false) {
-            final errCode = data['error_code'];
+            final errCode = _intErrorCode(data['error_code']);
             final msg = (data['message'] as String?)?.toLowerCase() ?? '';
             if (errCode == 10002 ||
                 errCode == 10010 ||
@@ -628,7 +628,7 @@ class SpJwtAuth {
               throw SpAuthError(
                 code: SpAuthErrorCode.refreshReuseDetected,
                 message: rawMsg,
-                errorCode: errCode is int ? errCode : null,
+                errorCode: errCode,
               );
             }
           }
@@ -722,12 +722,7 @@ class SpJwtAuth {
         bodyText = '${data['message'] ?? ''} ${data['error'] ?? ''}'
             .trim()
             .toLowerCase();
-        final codeVal = data['error_code'];
-        if (codeVal is int) {
-          errorCode = codeVal;
-        } else if (codeVal is String) {
-          errorCode = int.tryParse(codeVal);
-        }
+        errorCode = _intErrorCode(data['error_code']);
       } else if (data is String) {
         bodyText = data.toLowerCase();
       }
@@ -924,4 +919,12 @@ class _ClassifiedError {
     required this.code,
     required this.message,
   });
+}
+
+/// The backend's `error_code` as an int: an int, or a numeric string
+/// (`"10010"`); anything else is `null`.
+int? _intErrorCode(Object? value) {
+  if (value is int) return value;
+  if (value is String) return int.tryParse(value.trim());
+  return null;
 }

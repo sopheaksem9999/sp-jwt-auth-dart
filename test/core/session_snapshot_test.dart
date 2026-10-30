@@ -212,6 +212,57 @@ void main() {
     tab.dispose();
     other.close();
   });
+
+  group('200 refresh failure error_code', () {
+    // The message avoids "revoked" and "unauthenticated" so only the code
+    // can decide whether the session ends.
+    Response<dynamic> failure(RequestOptions o, Object? code) => Response(
+      requestOptions: o,
+      data: {'success': false, 'message': 'Token problem', 'error_code': code},
+    );
+
+    for (final code in <Object>[10010, 10002, '10010', '10002']) {
+      test('error_code ${code.runtimeType} $code ends the session '
+          '(refreshRejected)', () async {
+        await store.write(expired());
+        await auth.restore();
+        final ended = <SessionEnded>[];
+        final sub = auth.events.listen((e) {
+          if (e is SessionEnded) ended.add(e);
+        });
+        handler = (o) async => failure(o, code);
+        await expectLater(
+          auth.accessToken(),
+          throwsA(
+            isA<SpAuthError>()
+                .having(
+                  (e) => e.code,
+                  'code',
+                  SpAuthErrorCode.refreshReuseDetected,
+                )
+                .having((e) => e.errorCode, 'errorCode', int.parse('$code')),
+          ),
+        );
+        await sub.cancel();
+        expect(auth.currentSession, isNull);
+        expect(ended, hasLength(1));
+        expect(ended.single.endReason, SessionEndReason.refreshRejected);
+      });
+    }
+
+    for (final code in <Object>[5, '5', 'abc']) {
+      test(
+        'error_code ${code.runtimeType} $code does not end the session',
+        () async {
+          await store.write(expired());
+          await auth.restore();
+          handler = (o) async => failure(o, code);
+          await expectLater(auth.accessToken(), throwsA(isA<SpAuthError>()));
+          expect(auth.currentSession, isNotNull);
+        },
+      );
+    }
+  });
 }
 
 class _Adapter implements HttpClientAdapter {
